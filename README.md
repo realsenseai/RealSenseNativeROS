@@ -1,6 +1,10 @@
 <p align="center">
+<!-- Light mode -->
+<img src="https://raw.githubusercontent.com/realsenseai/librealsense/master/doc/img/realsense-logo-light-mode.png#gh-light-mode-only" alt="RealSense logo" width="30%"/>
+<!-- Dark mode -->
+<img src="https://raw.githubusercontent.com/realsenseai/librealsense/master/doc/img/realsense-logo-dark-mode.png#gh-dark-mode-only" alt="RealSense logo" width="30%"/>
   <br><br>
-  <b>Native ROS2 Interface for RealSense™ D555 Camera</b><br>
+  <b>Native ROS2 Interface for RealSense D555 Camera</b><br>
   <i>Driverless, Embedded ROS2 — No Host Wrapper Required</i>
   <br><br>
 </p>
@@ -56,33 +60,41 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 | **Launch mechanism** | `ros2 launch realsense2_camera rs_launch.py` | Automatic on device power-on |
 | **Parameter syntax** | `depth_module.emitter_enabled` | `Depth.option.Emitter_Enabled` |
 | **Topic namespace** | `/camera/camera/<stream>/...` | `/realsense/<DeviceModel>_<Serial>_<Stream>/...` |
-| **Image streams** | Depth, Color, IR1, IR2 | Depth, Color, IR1, IR2, CompressedColor, IMU |
+| **Image streams** | Depth, Color, IR1, IR2, IMU | Depth, Color, IR1, IR2, CompressedColor, IMU |
 | **Camera Info** | ✅ Published | ✅ Published |
 | **TF / Extrinsics** | ✅ Published (`/tf`, `/tf_static`) | ✅ Published (`/tf_static`) |
 | **Metadata** | ✅ `realsense2_camera_msgs/msg/Metadata` | ✅ `std_msgs/msg/String` (JSON) + `realsense2_camera_msgs/msg/Metadata` (legacy) |
 | **Point Cloud** | ✅ Host-generated | ❌ Not yet (use `depth_image_proc` on host) |
-| **ROS Version** | Humble, Jazzy | Humble |
+| **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble |
 
 <hr>
 
 ## Installation
 
 ### Prerequisites
-- **Network:** The D555 device must be on the same network subnet as the host PC.
+- **Network:** The D555 device must be on the same network subnet as the host PC (e.g., `192.168.11.x/24`, subnet mask `255.255.255.0`).
 - **Multicast:** The network must support UDP multicast for DDS discovery.
 - **ROS2 Distribution:** Humble.
-- **MTU:** 9000 (jumbo frames required on both host and device).
+- **MTU:** 9000 (this is the factory default and can be changed via device configuration). Jumbo frames are required on both host and device.
 
 ### Step 1: Install a ROS2 Distribution
 
 Follow the official installation guide for your platform:
 
-- **Ubuntu 24.04:** [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
 - **Ubuntu 22.04:** [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
+- **Ubuntu 24.04:** ROS2 Humble is not natively packaged for Ubuntu 24.04. Use a Docker container with Ubuntu 22.04 and ROS2 Humble installed.
+
+### Step 1.5: Update Device Firmware
+
+For the best experience, ensure your D555 is running the latest firmware:
+
+1. Download the latest firmware from the [RealSense firmware releases](https://dev.realsenseai.com/docs/firmware-releases) page (including early-access builds when available).
+2. Use `realsense-viewer` or `rs-fw-update` (from `librealsense`) to flash the firmware via USB.
+3. After updating, the device will reboot and reconnect automatically.
 
 ### Step 2: Connect the D555 Camera
 
-1. Connect the D555 to the host PC (or switch) via Ethernet cable.
+1. Connect the D555 to the host PC (or switch) via Ethernet cable. The D555 requires **Power over Ethernet (PoE)** — use a PoE-capable switch or PoE injector.
 2. Ensure both host and device are on the same subnet (e.g., `192.168.11.x`). Default D555 IP is `192.168.11.55`.
 3. Set the `ROS_DOMAIN_ID` to match the device's configured domain (default `0`):
    ```bash
@@ -100,6 +112,8 @@ ros2 node list
 ```
 
 > **Note:** Unlike `realsense-ros`, there is no `ros2 launch` or `ros2 run` command to start the camera node. The node starts automatically when the device boots.
+
+> **DDS Discovery:** If the device does not appear immediately, allow up to 30 seconds for DDS discovery to complete. In some network configurations, you may need to increase the DDS discovery timeout. Refer to your DDS middleware documentation (e.g., FastDDS, CycloneDDS) for details on configuring discovery-related timeouts.
 
 <hr>
 
@@ -316,8 +330,7 @@ ros2 topic echo /realsense/D555_343122300393/tf_static --once
 
 ### Extrinsics from sensor A to sensor B
 
-- Extrinsic from sensor A to sensor B means the position and orientation of sensor A relative to sensor B.
-- Imagine that B is the origin (0,0,0), then the Extrinsics(A→B) describes where sensor A is relative to sensor B.
+"Extrinsic from A to B" means: a transform that converts coordinates expressed in frame A into coordinates expressed in frame B.
 
 The D555 factory-calibrated extrinsics are encoded in the static TF transforms published on `/tf_static`.
 
@@ -370,10 +383,14 @@ ros2 topic echo /realsense/D555_343122300393_Depth/camera_info --once
 
 ### Metadata Topic
 
-The D555 publishes per-stream metadata containing hardware-level frame information in JSON format. Two topic variants are available for each stream:
+The D555 publishes per-stream metadata containing hardware-level frame information in JSON format.
 
-1. **Standard** (`metadata`): Uses `std_msgs/msg/String` — works with any ROS2 installation.
-2. **Legacy** (`metadata_legacy`): Uses `realsense2_camera_msgs/msg/Metadata` — D455-compatible format with `Header` (timestamp + frame_id) + `json_data`.
+> **Firmware behavior change:** Starting with firmware version **7.58 and later**, the device exposes only the ROS2-native metadata topic (`std_msgs/msg/String`). On firmware versions **prior to 7.58**, both the native and legacy metadata topics were published simultaneously.
+
+**Topic variants:**
+
+1. **Standard** (`metadata`): Uses `std_msgs/msg/String` — works with any ROS2 installation. Published on all firmware versions.
+2. **Legacy** (`metadata_legacy`): Uses `realsense2_camera_msgs/msg/Metadata` — D455-compatible format with `Header` (timestamp + frame_id) + `json_data`. Only available on firmware versions prior to 7.58.
 
 **Available metadata topics per stream:**
 ```
@@ -596,6 +613,9 @@ rclpy.shutdown()
 - **Practical (with JPEG compression):** ~70–110 Mbps
 
 ### Known Limitations
+
+> **Note:** The following limitations apply to firmware version **7.58.x**. Some may be resolved in future firmware releases.
+
 1. **Request Rate Limiting:** Limit service calls to approximately 1–2 per second, or add a 500 ms delay between burst requests. The SafeDDS ACK window is limited.
 2. **Sequential Parameter Processing:** `set_parameters` processes parameters sequentially; there is no transactional atomicity.
 3. **String Length Limits:** Parameter names are limited to 128 characters; string values to 256 characters.
@@ -639,6 +659,15 @@ rclpy.shutdown()
 - **Cause:** Potential firmware/middleware version mismatch.
 - **Fix:** Update device firmware to the latest version.
 
+### Factory Reset / USB Recovery
+If the device becomes unreachable due to a faulty network configuration, you can recover it via USB:
+1. Connect the D555 to the host PC using a USB cable.
+2. Use `realsense-viewer` or `rs-fw-update` (from `librealsense`) to reset the device to factory settings.
+3. This will restore the default network configuration (IP `192.168.11.55`, subnet mask `255.255.255.0`).
+4. Reconnect via Ethernet and reconfigure as needed.
+
+> **Note:** USB connectivity is intended for recovery and firmware updates only. Normal operation uses Ethernet.
+
 <hr>
 
 ## Contributing
@@ -649,4 +678,4 @@ Please refer to the project's contribution guidelines.
 
 ## License
 
-Copyright © RealSenseAI Corporation. All rights reserved.
+Copyright © RealSense, Inc. All rights reserved.
