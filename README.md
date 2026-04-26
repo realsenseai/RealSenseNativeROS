@@ -88,7 +88,7 @@ Follow the official installation guide for your platform:
 
 For the best experience, ensure your D555 is running the latest firmware:
 
-1. Download the latest firmware from the [RealSense firmware releases](https://dev.realsenseai.com/docs/firmware-releases) page (including early-access builds when available).
+1. Download the latest firmware from the [RealSense D500 firmware releases](https://dev.realsenseai.com/docs/firmware-release-d500) page (including early-access builds when available).
 2. Use `realsense-viewer` or `rs-fw-update` (from `librealsense`) to flash the firmware via USB.
 3. After updating, the device will reboot and reconnect automatically.
 
