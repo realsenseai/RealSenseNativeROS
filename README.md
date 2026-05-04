@@ -302,7 +302,7 @@ ros2 param get /D555_343122300393 Depth.option.Exposure
 ### TF from coordinate A to coordinate B
 
 - A TF message expresses a transform from coordinate frame `header.frame_id` (source) to `child_frame_id` (destination). [Reference](http://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/Transform.html).
-- In RealSense cameras, the origin point (0,0,0) is at the **left IR (Infrared_1)** sensor, named `camera_link`.
+- In RealSense cameras, the origin point (0,0,0) is at the **left IR (`Infrared_1`)** sensor, named `camera_link`.
 - Depth, left IR, and `camera_link` coordinates converge together.
 - The D555 firmware publishes static TFs to `/tf_static` between each sensor coordinate frame and the camera base (`camera_link`), as well as from each sensor's ROS coordinates to its optical coordinates.
 
@@ -390,7 +390,7 @@ The D555 publishes per-stream metadata containing hardware-level frame informati
 **Topic variants:**
 
 1. **Standard** (`metadata`): Uses `std_msgs/msg/String` — works with any ROS2 installation. Published on all firmware versions.
-2. **Legacy** (`metadata_legacy`): Uses `realsense2_camera_msgs/msg/Metadata` — D455-compatible format with `Header` (timestamp + frame_id) + `json_data`. Only available on firmware versions prior to 7.58.
+2. **Legacy** (`metadata_legacy`): Uses `realsense2_camera_msgs/msg/Metadata` — D455-compatible format with `Header` (timestamp + `frame_id`) + `json_data`. Only available on firmware versions prior to 7.58.
 
 **Available metadata topics per stream:**
 ```
@@ -473,7 +473,7 @@ rclpy.spin(node)
 
 The device exposes the following services under the namespace `/<DeviceModel>_<SerialNumber>`:
 
-#### hw_reset
+#### `hw_reset`
 - Reset the device. All streams are stopped.
 - **Type:** `std_srvs/srv/Empty`
 - Call example:
@@ -482,7 +482,7 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - **Note:** The device will disconnect from DDS and reappear after approximately 5–10 seconds.
 
-#### get_device_info_std
+#### `get_device_info_std`
 - Retrieve device information — serial number, firmware version, etc.
 - **Type:** `std_srvs/srv/Trigger`
 - Call example:
@@ -505,7 +505,7 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ros2 service call /D555_343122300393/help std_srvs/srv/Trigger
   ```
 
-#### list_parameters
+#### `list_parameters`
 - Returns a list of all available parameters.
 - **Type:** `rcl_interfaces/srv/ListParameters`
 - Call example:
@@ -513,7 +513,7 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ros2 service call /D555_343122300393/list_parameters rcl_interfaces/srv/ListParameters
   ```
 
-#### get_parameters
+#### `get_parameters`
 - Retrieve current values of specified parameters.
 - **Type:** `rcl_interfaces/srv/GetParameters`
 - Call example:
@@ -524,7 +524,7 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - Returns `PARAMETER_NOT_SET` for unknown parameters.
 
-#### set_parameters
+#### `set_parameters`
 - Set parameter values with range validation.
 - **Type:** `rcl_interfaces/srv/SetParameters`
 - Call example:
@@ -535,7 +535,7 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - **Response:** `successful` (bool) + `reason` (string) per parameter.
 
-#### describe_parameters
+#### `describe_parameters`
 - Returns metadata (type, description, range) for parameters.
 - **Type:** `rcl_interfaces/srv/DescribeParameters`
 - Call example:
