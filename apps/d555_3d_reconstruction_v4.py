@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
+# Copyright 2026 Intel Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
-D555 Camera 3D Reconstruction Application - V3 Pro Edition
+D555 Camera 3D Reconstruction Application - V4 Pro Edition
 
 Features:
 - 3D RGB textured view (rotating RGB point cloud)
@@ -10,7 +23,7 @@ Features:
 - All English UI with ASCII characters
 
 Usage:
-    python3 d555_3d_reconstruction_v3.py -gui
+    python3 d555_3d_reconstruction_v4.py -gui
 
 Controls:
     Q/ESC   - Quit
@@ -91,11 +104,11 @@ class Transform:
     rotation: np.ndarray = field(default_factory=lambda: np.array([0, 0, 0, 1]))
 
 
-class D555ReconstructionV3(Node):
-    """D555 3D Reconstruction Node - V3 Pro."""
+class D555ReconstructionV4(Node):
+    """D555 3D Reconstruction Node - V4 Pro."""
     
     def __init__(self, enable_gui: bool = False):
-        super().__init__('d555_3d_reconstruction_v3')
+        super().__init__('d555_3d_reconstruction_v4')
         
         self.enable_gui = enable_gui
         self.running = True
@@ -161,7 +174,7 @@ class D555ReconstructionV3(Node):
         self.device_serial = None
         self.topic_prefix = None
         
-        self.get_logger().info("D555 3D Reconstruction V3 Pro starting...")
+        self.get_logger().info("D555 3D Reconstruction V4 Pro starting...")
         self._discover_device()
     
     def _discover_device(self):
@@ -421,13 +434,13 @@ class D555ReconstructionV3(Node):
 class ProGUI:
     """Professional GUI with 3D RGB and Depth views."""
     
-    def __init__(self, node: D555ReconstructionV3):
+    def __init__(self, node: D555ReconstructionV4):
         self.node = node
         self.running = True
         self.paused = False
         
         # Window
-        self.window_name = "D555 3D Reconstruction V3 Pro"
+        self.window_name = "D555 3D Reconstruction V4 Pro"
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.window_name, 1920, 1080)
         
@@ -791,7 +804,7 @@ class ProGUI:
         
         # Title bar
         cv2.rectangle(combined, (0, 0), (combined.shape[1], 30), (15, 15, 18), -1)
-        title = f"D555 3D Reconstruction V3 Pro | Device: {self.node.device_serial or 'N/A'} | FPS: {self.fps:.0f} | Zoom: {self.zoom:.1f}x"
+        title = f"D555 3D Reconstruction V4 Pro | Device: {self.node.device_serial or 'N/A'} | FPS: {self.fps:.0f} | Zoom: {self.zoom:.1f}x"
         cv2.putText(combined, title, (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.ACCENT, 1)
         
         # Status indicators
@@ -845,17 +858,17 @@ class ProGUI:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='D555 3D Reconstruction V3 Pro')
+    parser = argparse.ArgumentParser(description='D555 3D Reconstruction V4 Pro')
     parser.add_argument('-gui', '--gui', action='store_true', help='Enable GUI')
     args, ros_args = parser.parse_known_args()
     
     rclpy.init(args=ros_args)
-    node = D555ReconstructionV3(enable_gui=args.gui)
+    node = D555ReconstructionV4(enable_gui=args.gui)
     
     gui = ProGUI(node) if args.gui else None
     
     print("\n" + "="*70)
-    print("   D555 3D Reconstruction V3 Pro")
+    print("   D555 3D Reconstruction V4 Pro")
     print("="*70)
     print(f"   GUI: {'Enabled' if args.gui else 'Disabled'}")
     print(f"   ROS_DOMAIN_ID: {os.environ.get('ROS_DOMAIN_ID', '0')}")

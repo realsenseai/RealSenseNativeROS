@@ -114,93 +114,76 @@ configured to receive trigger pulses from the external STROBE input pin
 
 ## Architecture
 
-```plantuml
-@startuml
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontSize 12
+```mermaid
+graph TD
+    sync(["Sync Signal<br/>(External Mode)"])
 
-node "Host PC" {
-    component "test_external_sync.py" as test
-    component "ROS 2 Domain" as ros
-}
+    subgraph Host PC
+        ros["ROS 2 Domain"]
+        test["test_external_sync.py"]
+    end
 
-cloud "Sync Signal\n(External Mode)" as sync
+    camA["Camera A"]
+    camB["Camera B"]
+    camC["Camera C"]
 
-node "Camera A" as camA
-node "Camera B" as camB
-node "Camera C" as camC
+    sync --> camA
+    sync --> camB
+    sync --> camC
 
-sync -down-> camA
-sync -down-> camB
-sync -down-> camC
+    camA -->|"Image + metadata topics"| ros
+    camB -->|"Image + metadata topics"| ros
+    camC -->|"Image + metadata topics"| ros
 
-camA -down-> ros : Image + metadata topics
-camB -down-> ros : Image + metadata topics
-camC -down-> ros : Image + metadata topics
-
-ros -right-> test : subscribe Image\n(trigger metadata)\nsubscribe metadata\n(Sensor Timestamp)
-@enduml
+    ros -->|"subscribe Image<br/>(trigger metadata)<br/>subscribe metadata<br/>(Sensor Timestamp)"| test
 ```
 
 ## Test Flow
 
-```plantuml
-@startuml
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontSize 11
-skinparam ActivityFontSize 11
+```mermaid
+flowchart TD
+    A([Start]) --> B["Discover /D555_* nodes"]
+    B --> C{"--enable-ext-sync?"}
+    C -->|yes| D["Set Camera_Sync_Mode<br/>= External"]
+    C -->|no| E["Set Camera_Sync_Mode<br/>= Internal"]
+    D --> F
+    E --> F
 
-start
+    F["Switch all cameras to<br/>target FPS"] --> G["Conditioning stop/start"]
 
-:Discover /D555_* nodes;
+    subgraph Collect_FPS ["Collect @ FPS"]
+        G --> H["Round 1 — subscribe Image + metadata<br/>collect Sensor Timestamps<br/>paired by closest timestamp"]
+        H --> I["Stop/start streams<br/>(profile change, NO hw_reset)"]
+        I --> J["Round N — collect frames"]
+        J --> K{"more rounds?"}
+        K -->|yes| I
+    end
 
-if (--enable-ext-sync?) then (yes)
-    :Set Camera_Sync_Mode\n= External;
-else (no)
-    :Set Camera_Sync_Mode\n= Internal;
-endif
+    subgraph Test_A ["Test A @ FPS"]
+        K -->|no| L["Pair Depth/Color frames<br/>by closest Sensor Timestamp"]
+        L --> M["Compute Sensor Timestamp<br/>offset (Color − Depth)"]
+        M --> N["Check |avg offset|<br/>(sync status)"]
+        N --> O["Check offset std-dev<br/>(consistency)"]
+        O --> P["Check interval match"]
+    end
 
-repeat
-    :Switch all cameras to\ntarget FPS;
-    :Conditioning stop/start;
+    P --> Q{"more FPS values?"}
+    Q -->|yes| F
+    Q -->|no| R["Combine results<br/>(PASS if ANY FPS passes<br/>for each camera)"]
 
-    partition "Collect @ FPS" {
-        :Round 1 — subscribe Image + metadata\ncollect Sensor Timestamps\npaired by closest timestamp;
+    R --> S{"multi-camera?"}
+    S -->|no| V["Print unified<br/>results summary"]
+    S -->|yes| T{"--enable-ptp?"}
+    T -->|no| V
 
-        repeat
-            :Stop/start streams\n(profile change,\nNO hw_reset);
-            :Round N — collect frames;
-        repeat while (more rounds?)
-    }
+    subgraph Test_B ["Test B: PTP"]
+        T -->|yes| U1["Compute PTP offsets<br/>(host_rx − Sensor Timestamp)"]
+        U1 --> U2["Convert all timestamps<br/>to host wall-clock"]
+        U2 --> U3["Compare PTP-corrected<br/>timestamps across cameras"]
+    end
 
-    partition "Test A @ FPS" {
-        :Pair Depth/Color frames\nby closest Sensor Timestamp;
-        :Compute Sensor Timestamp\noffset (Color − Depth);
-        :Check |avg offset|\n(sync status);
-        :Check offset std-dev\n(consistency);
-        :Check interval match;
-    }
-
-repeat while (more FPS values?)
-
-:Combine results\n(PASS if ANY FPS passes\nfor each camera);
-
-if (multi-camera?) then (yes)
-    if (--enable-ptp?) then (yes)
-        partition "Test B: PTP" {
-            :Compute PTP offsets\n(host_rx − Sensor Timestamp);
-            :Convert all timestamps\nto host wall-clock;
-            :Compare PTP-corrected\ntimestamps across cameras;
-        }
-    else (no)
-    endif
-else (no)
-endif
-
-:Print unified\nresults summary;
-
-stop
-@enduml
+    U3 --> V
+    V --> W([Stop])
 ```
 
 ## Prerequisites
