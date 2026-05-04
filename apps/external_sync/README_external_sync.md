@@ -6,17 +6,17 @@ This tool verifies the **frame synchronization** of Intel RealSense D555e
 cameras over ROS 2.  It supports two sync modes and optional PTP
 cross-validation.
 
-| Mode | Description |
-|------|-------------|
+| Mode                   | Description                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
 | **Internal** (default) | Camera's internal PWM master triggers both RGB and Depth sensors.  No external hardware needed. |
-| **External** | An external trigger signal synchronizes all cameras.  Used for multi-camera setups. |
+| **External**           | An external trigger signal synchronizes all cameras.  Used for multi-camera setups.             |
 
 The tool performs two levels of verification:
 
-| Test | Scope | What It Checks |
-|------|-------|----------------|
-| **Test A** | Per-camera | RGB and Depth Sensor Timestamps have constant offset, identical frame intervals, and sync status matches the expected mode.  Tests multiple FPS values (default 30, 15); sync passes if **any** FPS produces a passing result. |
-| **Test B** | Multi-camera | PTP-corrected timestamps coincide for simultaneously-captured frames |
+| Test       | Scope        | What It Checks                                                                                                                                                                                                                 |
+| ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Test A** | Per-camera   | RGB and Depth Sensor Timestamps have constant offset, identical frame intervals, and sync status matches the expected mode.  Tests multiple FPS values (default 30, 15); sync passes if **any** FPS produces a passing result. |
+| **Test B** | Multi-camera | PTP-corrected timestamps coincide for simultaneously-captured frames                                                                                                                                                           |
 
 ## Timestamp Source
 
@@ -204,21 +204,21 @@ python3 tests/scripts/test_external_sync.py --help
 
 ### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--rounds N` | 3 | Stop/start rounds per phase |
-| `--samples N` | 30 | Frames to collect per camera per round |
-| `--threshold-intra MS` | 2.0 | Max allowed offset std-dev and interval diff (ms) |
-| `--threshold-ptp MS` | 2.0 | Max allowed PTP inter-camera alignment (ms) |
-| `--enable-ext-sync` | off | Set `Camera_Sync_Mode` to `External` |
-| `--no-signal` | off | External sync **without** signal (expect NOT synced).  Use with `--enable-ext-sync`. |
-| `--hw-reset-verify` | off | Run Phase 2: hw_reset then verify offsets re-lock |
-| `--enable-ptp` | off | Enable PTP cross-validation (Test B) |
-| `--collect-timeout S` | 30 | Timeout for sample collection |
-| `--restart-wait S` | 5 | Wait after stream stop/start for stabilization |
-| `--hw-reset-wait S` | 15 | Wait after hw_reset for camera recovery |
-| `--min-cameras N` | 0 | Minimum cameras to discover (retries with daemon restart if not met) |
-| `--fps FPS1,FPS2,...` | `30,15` | Comma-separated FPS values to test.  Sync passes if **any** FPS produces a passing result. |
+| Flag                   | Default | Description                                                                                |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `--rounds N`           | 3       | Stop/start rounds per phase                                                                |
+| `--samples N`          | 30      | Frames to collect per camera per round                                                     |
+| `--threshold-intra MS` | 2.0     | Max allowed offset std-dev and interval diff (ms)                                          |
+| `--threshold-ptp MS`   | 2.0     | Max allowed PTP inter-camera alignment (ms)                                                |
+| `--enable-ext-sync`    | off     | Set `Camera_Sync_Mode` to `External`                                                       |
+| `--no-signal`          | off     | External sync **without** signal (expect NOT synced).  Use with `--enable-ext-sync`.       |
+| `--hw-reset-verify`    | off     | Run Phase 2: hw_reset then verify offsets re-lock                                          |
+| `--enable-ptp`         | off     | Enable PTP cross-validation (Test B)                                                       |
+| `--collect-timeout S`  | 30      | Timeout for sample collection                                                              |
+| `--restart-wait S`     | 5       | Wait after stream stop/start for stabilization                                             |
+| `--hw-reset-wait S`    | 15      | Wait after hw_reset for camera recovery                                                    |
+| `--min-cameras N`      | 0       | Minimum cameras to discover (retries with daemon restart if not met)                       |
+| `--fps FPS1,FPS2,...`  | `30,15` | Comma-separated FPS values to test.  Sync passes if **any** FPS produces a passing result. |
 
 ### Examples
 
@@ -355,58 +355,9 @@ The test checks three criteria:
 3. **Interval matching** — `max|ΔDepth[i] − ΔColor[i]|` ≤ threshold.
    Both streams must step at identical intervals.
 
-```plantuml
-@startuml
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontSize 11
+![Timing Diagram](images/timing_diagram.svg)
 
-robust "Depth\nSensor TS" as D
-robust "Color\nSensor TS" as C
-
-scale 500 as 80 pixels
-
-@0
-D is Frame_1
-
-@33
-D is Frame_2
-
-@66
-D is Frame_3
-
-@99
-D is Frame_4
-
-@0
-C is Frame_1
-
-@33
-C is Frame_2
-
-@66
-C is Frame_3
-
-@99
-C is Frame_4
-
-@132
-D is {hidden}
-C is {hidden}
-
-legend right
-  Both streams: 30fps (33.3ms interval)
-  **Internal mode:**
-    avg offset = 0.036ms (SYNCED)
-    std = 0.000ms
-  **External mode (with signal):**
-    avg offset ≈ 0ms (SYNCED)
-    std = 0.000ms
-  **External mode (no signal):**
-    avg offset = −17.285ms (NOT SYNCED)
-    std = 0.000ms
-end legend
-@enduml
-```
+Source: [timing_diagram.puml](plantuml/timing_diagram.puml)
 
 ### Test B: PTP Cross-Validation (--enable-ptp)
 
@@ -443,26 +394,9 @@ If cameras share an external trigger:
 - This provides an **independent confirmation** of sync, using the host
   clock as a common reference instead of relying on camera-to-camera offsets
 
-```plantuml
-@startuml
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontSize 12
+![PTP Diagram](images/ptp_diagram.svg)
 
-rectangle "Camera A\nsensor_ts = 1000" as CA
-rectangle "Camera B\nsensor_ts = 5000" as CB
-rectangle "Host Clock\nwall_time" as Host
-
-CA -right-> Host : rx_time = 99001\nptp_offset_A\n= 99001 − 1000\n= 98001
-CB -right-> Host : rx_time = 99005\nptp_offset_B\n= 99005 − 5000\n= 94005
-
-note bottom of Host
-  Corrected A: 1000 + 98001 = 99001
-  Corrected B: 5000 + 94005 = 99005
-  Delta = 4 (≈ transport jitter)
-  If external sync: delta ≈ 0
-end note
-@enduml
-```
+Source: [ptp_diagram.puml](plantuml/ptp_diagram.puml)
 
 **Output**: The tool displays PTP-corrected timestamps from all cameras,
 showing whether they actually see the same physical moment.  This is
@@ -471,47 +405,19 @@ are real and not an artifact.
 
 ### Design Summary
 
-```plantuml
-@startuml
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontSize 11
+![Design Summary](images/design_summary.svg)
 
-package "Test A: Intra-Camera" {
-    usecase "Verify |avg offset|\n(sync status)" as TA0
-    usecase "Verify offset\nstd-dev ≈ 0" as TA1
-    usecase "Verify frame\nintervals match" as TA2
-    usecase "Detect dropped\nframes" as TA3
-}
-
-package "Test B: PTP" {
-    usecase "Compute PTP offsets\ncamera→host" as TB1
-    usecase "PTP-corrected frame\nalignment" as TB2
-    usecase "Show wall-clock\ntimestamps" as TB3
-}
-
-note bottom of TA0
-  Internal: |avg| < 5ms → SYNCED
-  External: |avg| > 5ms → NOT SYNCED
-  (expected behavior)
-end note
-
-note bottom of TB1
-  Independent validation
-  using host wall-clock
-  as common reference.
-end note
-@enduml
-```
+Source: [design_summary.puml](plantuml/design_summary.puml)
 
 **Verification matrix:**
 
-| Scenario | Test A (sync status) | Test A (consistency) | Test B (PTP) |
-|----------|---------------------|---------------------|-------------|
-| Single camera, Internal sync | SYNCED (\|avg\| < 5ms) | PASS (std ≈ 0) | N/A |
-| Single camera, External sync, no signal | NOT SYNCED (\|avg\| > 10ms) | PASS (std ≈ 0) | N/A |
-| Multi-camera, Internal sync | SYNCED per camera | PASS per camera | NOT synced |
-| Multi-camera, External sync, with signal | SYNCED per camera | PASS per camera | PASS (aligned) |
-| Multi-camera, External sync, no signal | NOT SYNCED per camera | PASS per camera (PLL free-run) | FAIL |
+| Scenario                                 | Test A (sync status)        | Test A (consistency)           | Test B (PTP)   |
+| ---------------------------------------- | --------------------------- | ------------------------------ | -------------- |
+| Single camera, Internal sync             | SYNCED (\|avg\| < 5ms)      | PASS (std ≈ 0)                 | N/A            |
+| Single camera, External sync, no signal  | NOT SYNCED (\|avg\| > 10ms) | PASS (std ≈ 0)                 | N/A            |
+| Multi-camera, Internal sync              | SYNCED per camera           | PASS per camera                | NOT synced     |
+| Multi-camera, External sync, with signal | SYNCED per camera           | PASS per camera                | PASS (aligned) |
+| Multi-camera, External sync, no signal   | NOT SYNCED per camera       | PASS per camera (PLL free-run) | FAIL           |
 
 ### Why Single Camera + External Sync (No Signal) Still Shows std ≈ 0
 
@@ -531,12 +437,12 @@ the same clock source, the offset doesn't drift (std ≈ 0).
 The CSF (Camera Sensor Framework) driver configures completely different
 hardware paths for each mode:
 
-| Parameter | Internal (PWM Master) | External |
-|-----------|----------------------|----------|
-| PWM controller | **Enabled** (`pwm_mode=1`) | **Disabled** (`pwm_mode=0`) |
-| Trigger source | `CSF_SYNC_TRIGGER_SRC_FW_GLOBAL` | `CSF_SYNC_TRIGGER_SRC_STROBE` |
-| GPIO DO source | `SOURCE_GLOBAL_TRIGGER` | `SOURCE_STROBE_IN_x` (rising edge) |
-| Sensor regs | `ext_vs_en=1` (0x3823=0x30) | Same `ext_vs_en=1` (0x3823=0x30) |
+| Parameter      | Internal (PWM Master)            | External                           |
+| -------------- | -------------------------------- | ---------------------------------- |
+| PWM controller | **Enabled** (`pwm_mode=1`)       | **Disabled** (`pwm_mode=0`)        |
+| Trigger source | `CSF_SYNC_TRIGGER_SRC_FW_GLOBAL` | `CSF_SYNC_TRIGGER_SRC_STROBE`      |
+| GPIO DO source | `SOURCE_GLOBAL_TRIGGER`          | `SOURCE_STROBE_IN_x` (rising edge) |
+| Sensor regs    | `ext_vs_en=1` (0x3823=0x30)      | Same `ext_vs_en=1` (0x3823=0x30)   |
 
 Source files:
 - Depth sensor (OG02B10): `csf_og02b10_configuration.h` — `amr_og02b10_pwm_master_fsin` vs `amr_og02b10_external_vsync_fsin`
@@ -768,26 +674,26 @@ ANALYSIS (sync_mode=External)
 
 ## Exit Code
 
-| Code | Meaning |
-|------|---------|
-| 0 | All tests PASS |
-| 1 | One or more tests FAIL |
+| Code | Meaning                |
+| ---- | ---------------------- |
+| 0    | All tests PASS         |
+| 1    | One or more tests FAIL |
 
 ## Troubleshooting
 
-| Symptom | Possible Cause | Fix |
-|---------|---------------|-----|
-| No D555e nodes found | Wrong `ROS_DOMAIN_ID` | `export ROS_DOMAIN_ID=2`, verify `ros2 node list` |
-| No D555e nodes found | DDS discovery stale | Use `--min-cameras N` (auto-restarts daemon), or manually: `ros2 daemon stop && ros2 daemon start` |
-| `ros2 node list` returns empty/partial | Daemon cache stale after many CLI calls | The tool auto-flushes every 20 calls.  Manually: `ros2 daemon stop && sleep 1 && ros2 daemon start` |
-| No Depth/Color metadata | Image topic not subscribed | Ensure Image subscription active (tool does this automatically) |
-| No Depth/Color metadata | Stream not active | Check camera is streaming: `ros2 topic hz /realsense/D555_{serial}_Depth` |
-| No Color metadata for all cameras | Color streams dead after many mode switches | Restart `realsense-viewer` (firmware issue — Color/CompressedColor stops publishing after repeated mode changes) |
-| No Color metadata for one camera | Camera Color stream intermittent | The Color DDS stream on some cameras may be unreliable; retry the test |
-| Test A SKIP: "No Color metadata" | CompRGB stream not publishing | Check `ros2 topic hz /realsense/D555_{serial}_CompressedColor`.  Restart camera if needed. |
-| Test A FAIL after mode switch | Mode-switching transient | The firmware may need time to stabilize after switching between Internal/External.  Re-run the test without changing mode. |
+| Symptom                                             | Possible Cause                               | Fix                                                                                                                                                                                                       |
+| --------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No D555e nodes found                                | Wrong `ROS_DOMAIN_ID`                        | `export ROS_DOMAIN_ID=2`, verify `ros2 node list`                                                                                                                                                         |
+| No D555e nodes found                                | DDS discovery stale                          | Use `--min-cameras N` (auto-restarts daemon), or manually: `ros2 daemon stop && ros2 daemon start`                                                                                                        |
+| `ros2 node list` returns empty/partial              | Daemon cache stale after many CLI calls      | The tool auto-flushes every 20 calls.  Manually: `ros2 daemon stop && sleep 1 && ros2 daemon start`                                                                                                       |
+| No Depth/Color metadata                             | Image topic not subscribed                   | Ensure Image subscription active (tool does this automatically)                                                                                                                                           |
+| No Depth/Color metadata                             | Stream not active                            | Check camera is streaming: `ros2 topic hz /realsense/D555_{serial}_Depth`                                                                                                                                 |
+| No Color metadata for all cameras                   | Color streams dead after many mode switches  | Restart `realsense-viewer` (firmware issue — Color/CompressedColor stops publishing after repeated mode changes)                                                                                          |
+| No Color metadata for one camera                    | Camera Color stream intermittent             | The Color DDS stream on some cameras may be unreliable; retry the test                                                                                                                                    |
+| Test A SKIP: "No Color metadata"                    | CompRGB stream not publishing                | Check `ros2 topic hz /realsense/D555_{serial}_CompressedColor`.  Restart camera if needed.                                                                                                                |
+| Test A FAIL after mode switch                       | Mode-switching transient                     | The firmware may need time to stabilize after switching between Internal/External.  Re-run the test without changing mode.                                                                                |
 | Test A FAIL: large offset in External (with signal) | Sync not working or software timestamp issue | Verify external trigger signal is connected and active.  Check firmware sensor timestamping logic.  A large offset (e.g. ~46ms) indicates the sensors are not firing simultaneously on the trigger pulse. |
-| Test A FAIL: NOT SYNCED in Internal mode | Sync hardware issue | Check firmware, restart camera, verify Internal mode param |
-| Test A FAIL: high std-dev | Frame drops or sync instability | Check DDS/Ethernet bandwidth, try fewer `--samples` |
-| Test B FAIL: PTP alignment off | No shared trigger or high network jitter | Check sync cable; try more `--samples` |
-| `Camera_Sync_Mode` param fail | Firmware doesn't support it | Check with `ros2 param describe` |
+| Test A FAIL: NOT SYNCED in Internal mode            | Sync hardware issue                          | Check firmware, restart camera, verify Internal mode param                                                                                                                                                |
+| Test A FAIL: high std-dev                           | Frame drops or sync instability              | Check DDS/Ethernet bandwidth, try fewer `--samples`                                                                                                                                                       |
+| Test B FAIL: PTP alignment off                      | No shared trigger or high network jitter     | Check sync cable; try more `--samples`                                                                                                                                                                    |
+| `Camera_Sync_Mode` param fail                       | Firmware doesn't support it                  | Check with `ros2 param describe`                                                                                                                                                                          |

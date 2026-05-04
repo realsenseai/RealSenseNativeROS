@@ -1,0 +1,50 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+robust "Depth\nSensor TS" as D
+robust "Color\nSensor TS" as C
+
+scale 500 as 80 pixels
+
+@0
+D is Frame_1
+
+@33
+D is Frame_2
+
+@66
+D is Frame_3
+
+@99
+D is Frame_4
+
+@0
+C is Frame_1
+
+@33
+C is Frame_2
+
+@66
+C is Frame_3
+
+@99
+C is Frame_4
+
+@132
+D is {hidden}
+C is {hidden}
+
+legend right
+  Both streams: 30fps (33.3ms interval)
+  **Internal mode:**
+    avg offset = 0.036ms (SYNCED)
+    std = 0.000ms
+  **External mode (with signal):**
+    avg offset ≈ 0ms (SYNCED)
+    std = 0.000ms
+  **External mode (no signal):**
+    avg offset = −17.285ms (NOT SYNCED)
+    std = 0.000ms
+end legend
+@enduml

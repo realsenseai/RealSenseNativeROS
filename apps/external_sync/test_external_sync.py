@@ -77,7 +77,7 @@ class FrameSample:
     sensor_timestamp_us: float   # Sensor Timestamp from metadata (us)
     frame_timestamp_us: float    # Frame Timestamp from metadata (us)
     stream: str                  # "Color" or "Depth"
-    rx_timestamp_us: float = 0.0 # Host receive time in us (for PTP)
+    rx_timestamp_us: float = 0.0  # Host receive time in us (for PTP)
 
 
 @dataclass

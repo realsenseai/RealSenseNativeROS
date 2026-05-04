@@ -110,7 +110,8 @@ def is_compressed_stream(stream: str, topic: str) -> bool:
 def detect_serial() -> str:
     """Auto-detect first D555 node serial from ros2 node list."""
     try:
-        out = subprocess.check_output(["ros2", "node", "list"], text=True, timeout=5)
+        out = subprocess.check_output(
+            ["ros2", "node", "list"], text=True, timeout=5)
         m = re.search(r"/(?:D555)_(\d+)", out)
         if m:
             return m.group(1)
@@ -133,7 +134,7 @@ def detect_camera_nic(camera_ip: str) -> str:
     try:
         cam = ipaddress.ip_address(camera_ip)
         out = subprocess.check_output(["ip", "-br", "addr", "show"],
-                                       text=True, timeout=5)
+                                      text=True, timeout=5)
         for line in out.splitlines():
             parts = line.split()
             if len(parts) < 3:
@@ -205,12 +206,12 @@ def fetch_device_info(serial: str) -> dict:
             "net":   ""
         }
 
-    serial_val   = info.get("serial",      serial)
-    fw           = info.get("fw-version",  "?")
-    ip           = info.get("actual_ip",   "?")
-    mtu          = info.get("mtu",         "?")
-    trans_delay  = info.get("trans_delay", "?")
-    link_speed   = info.get("link_speed",  "?")
+    serial_val = info.get("serial",      serial)
+    fw = info.get("fw-version",  "?")
+    ip = info.get("actual_ip",   "?")
+    mtu = info.get("mtu",         "?")
+    trans_delay = info.get("trans_delay", "?")
+    link_speed = info.get("link_speed",  "?")
     # Return a dict so we can build multi-line banner later
     return {
         "sn_fw": f"SN:{serial_val}  FW:{fw}",
@@ -249,7 +250,8 @@ def _parse_rs_dds_config_net() -> dict:
     if m_mtu:
         info["device_mtu"] = m_mtu.group(1)
 
-    m_delay = re.search(r"transmission\s*delay,\s*us:\s*(-?\d+)", out, re.IGNORECASE)
+    m_delay = re.search(
+        r"transmission\s*delay,\s*us:\s*(-?\d+)", out, re.IGNORECASE)
     if m_delay:
         info["traffic_delay_us"] = m_delay.group(1)
 
@@ -260,7 +262,8 @@ def _parse_rs_dds_config_net() -> dict:
 
 def _try_read_device_ufo_from_serial() -> str:
     """Best-effort read of UFO state from serial ifconfig output (optional)."""
-    ok, acm_out = _run_cmd(["bash", "-lc", "grep -i '^pu port' ~/.minirc.dfl | awk '{print $3}'"], timeout_sec=3.0)
+    ok, acm_out = _run_cmd(
+        ["bash", "-lc", "grep -i '^pu port' ~/.minirc.dfl | awk '{print $3}'"], timeout_sec=3.0)
     acm = acm_out.strip() if ok else ""
     if not acm:
         acm = "/dev/ttyACM0"
@@ -275,7 +278,8 @@ def _try_read_device_ufo_from_serial() -> str:
     if not ok or not out:
         return "unknown"
 
-    matches = re.findall(r"UFO\s*\(UDP Fragmentation Offload\):\s*([A-Za-z]+)", out)
+    matches = re.findall(
+        r"UFO\s*\(UDP Fragmentation Offload\):\s*([A-Za-z]+)", out)
     return matches[-1] if matches else "unknown"
 
 
@@ -314,18 +318,21 @@ def check_stream_network_preconditions(device_info: dict) -> bool:
         print("[ERROR] Cannot resolve device IP from Device.Info or rs-dds-config")
         return False
 
-    ok, route_out = _run_cmd(["ip", "route", "get", camera_ip], timeout_sec=5.0)
+    ok, route_out = _run_cmd(
+        ["ip", "route", "get", camera_ip], timeout_sec=5.0)
     if not ok or not route_out:
         print(f"[ERROR] Cannot resolve host route to camera IP {camera_ip}")
         return False
 
     m_nic = re.search(r"\bdev\s+(\S+)", route_out)
     if not m_nic:
-        print(f"[ERROR] Cannot parse host NIC from route output: {route_out.strip()}")
+        print(
+            f"[ERROR] Cannot parse host NIC from route output: {route_out.strip()}")
         return False
     host_nic = m_nic.group(1)
 
-    ok, link_out = _run_cmd(["ip", "-o", "link", "show", "dev", host_nic], timeout_sec=5.0)
+    ok, link_out = _run_cmd(
+        ["ip", "-o", "link", "show", "dev", host_nic], timeout_sec=5.0)
     if not ok or not link_out:
         print(f"[ERROR] Cannot read MTU from host NIC {host_nic}")
         return False
@@ -407,9 +414,12 @@ def resolve_stream_name(name: str) -> str:
 #   Conclusion: hw_fps is computed in O(1) with timestamp append in callback;
 #   display rendering is entirely outside the ROS critical path.
 # ─────────────────────────────────────────────────────────────────────────────
-_HW_FPS_WINDOW       = 2.0    # Sliding-window length (seconds); sample count = fps × 2
-_DISPLAY_INTERVAL    = 0.1    # UI render interval (seconds), ~10fps display, independent of HW fps
-_HW_FPS_OK_THRESHOLD = 29.5   # HW FPS must be >= this value for LIVE (green) status
+# Sliding-window length (seconds); sample count = fps × 2
+_HW_FPS_WINDOW = 2.0
+# UI render interval (seconds), ~10fps display, independent of HW fps
+_DISPLAY_INTERVAL = 0.1
+# HW FPS must be >= this value for LIVE (green) status
+_HW_FPS_OK_THRESHOLD = 29.5
 
 
 class StreamState:
@@ -428,8 +438,9 @@ class StreamState:
         self.meta = ""
         self.hw_fps = 0.0
         self._fps_buf = collections.deque()   # timestamps of received frames
-        self.first_cb_time = None   # wall-clock time of first callback (None = never)
-        self.last_cb_time  = None   # wall-clock time of most recent callback
+        # wall-clock time of first callback (None = never)
+        self.first_cb_time = None
+        self.last_cb_time = None   # wall-clock time of most recent callback
         # display-fps bookkeeping
         self.last_show = 0.0
         self.dis_fps = 0.0
@@ -502,14 +513,17 @@ class Viewer(Node):
         self._od_sub = None
 
         if compressed:
-            self._sub = self.create_subscription(CompressedImage, topic, self._cb_compressed, qos)
+            self._sub = self.create_subscription(
+                CompressedImage, topic, self._cb_compressed, qos)
             self.get_logger().info(f"[{topic}] CompressedImage BEST_EFFORT")
         else:
-            self._sub = self.create_subscription(Image, topic, self._cb_image, qos)
+            self._sub = self.create_subscription(
+                Image, topic, self._cb_image, qos)
             self.get_logger().info(f"[{topic}] Image BEST_EFFORT")
 
         if od_topic:
-            self._od_sub = self.create_subscription(String, od_topic, self._cb_od, qos)
+            self._od_sub = self.create_subscription(
+                String, od_topic, self._cb_od, qos)
             self.get_logger().info(f"[{od_topic}] OD overlay enabled")
 
     def unsubscribe(self):
@@ -574,7 +588,8 @@ class Viewer(Node):
         buf = np.frombuffer(msg.data, dtype=np.uint8)
         img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
         if img is None:
-            self.get_logger().error(f"imdecode failed: format='{msg.format}' bytes={len(msg.data)}")
+            self.get_logger().error(
+                f"imdecode failed: format='{msg.format}' bytes={len(msg.data)}")
             return
         with st.lock:
             st.record_hw_frame()
@@ -601,8 +616,10 @@ class Viewer(Node):
 # Object Detection overlay helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-_OD_CLASS_NAMES = {0: "Person", 1: "Vehicle", 2: "Box", 3: "Robot", 4: "Charger", 5: "Ladder"}
-_OD_COLORS = [(0, 255, 0), (255, 0, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255, 0, 255)]
+_OD_CLASS_NAMES = {0: "Person", 1: "Vehicle",
+                   2: "Box", 3: "Robot", 4: "Charger", 5: "Ladder"}
+_OD_COLORS = [(0, 255, 0), (255, 0, 0), (0, 0, 255),
+              (255, 255, 0), (0, 255, 255), (255, 0, 255)]
 
 
 def _draw_od_overlay(img, detections, scale_x=1.0, scale_y=1.0):
@@ -627,7 +644,8 @@ def _draw_od_overlay(img, detections, scale_x=1.0, scale_y=1.0):
         if dist > 0:
             label += f" {dist:.2f}m"
         (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.rectangle(img, (x1, y1 - th - 6), (x1 + tw + 2, y1), color, cv2.FILLED)
+        cv2.rectangle(img, (x1, y1 - th - 6),
+                      (x1 + tw + 2, y1), color, cv2.FILLED)
         cv2.putText(img, label, (x1 + 1, y1 - 4),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
     if detections:
@@ -641,11 +659,11 @@ def _draw_od_overlay(img, detections, scale_x=1.0, scale_y=1.0):
 
 _SUB_W = 640           # default sub-figure width  (resized to this)
 _SUB_H = 400           # default sub-figure height (resized to this)
-_FONT       = cv2.FONT_HERSHEY_DUPLEX   # sharper than SIMPLEX (double-stroke)
+_FONT = cv2.FONT_HERSHEY_DUPLEX   # sharper than SIMPLEX (double-stroke)
 _FONT_SCALE = 0.55
 _FONT_THICK = 1                         # thin strokes look crisper at this font
 _BANNER_PAD = 8        # vertical padding inside each banner bar
-_BORDER_W   = 2        # white border width between sub-figures (pixels)
+_BORDER_W = 2        # white border width between sub-figures (pixels)
 
 
 def _banner_height() -> int:
@@ -655,10 +673,10 @@ def _banner_height() -> int:
 
 
 # Banner background colours (BGR)
-_BG_LIVE   = (  0, 220,   0)   # green  — actively receiving
-_BG_STALE  = (  0, 140, 255)   # orange — stream interrupted
-_BG_NO_CB  = (  0,   0, 220)   # red    — DDS never matched
-_BG_DEVICE = (  0, 220, 255)   # yellow — device info rows
+_BG_LIVE = (0, 220,   0)   # green  — actively receiving
+_BG_STALE = (0, 140, 255)   # orange — stream interrupted
+_BG_NO_CB = (0,   0, 220)   # red    — DDS never matched
+_BG_DEVICE = (0, 220, 255)   # yellow — device info rows
 _TEXT_BLACK = (0, 0, 0)         # all banner text is black
 
 
@@ -720,17 +738,17 @@ def build_combined_frame(
       • Below: stream sub-figures tiled in one row, separated by white borders
         Each sub-figure = per-stream banner + scaled image + white border frame
     """
-    n   = len(labels)
-    bh  = _banner_height()
-    bw  = _BORDER_W
+    n = len(labels)
+    bh = _banner_height()
+    bw = _BORDER_W
 
     # Each sub-figure column occupies (sub_w + bw) pixels; trailing border on right
-    col_w    = sub_w + bw          # width per column including left border
-    total_w  = col_w * n + bw      # +bw for the rightmost border
+    col_w = sub_w + bw          # width per column including left border
+    total_w = col_w * n + bw      # +bw for the rightmost border
 
     # Two device banner rows + bottom border + stream-banner row + image rows + bottom border
     dev_rows = 2 if device_info.get("net") else 1
-    dev_h    = bh * dev_rows + bw  # device banners + separator line
+    dev_h = bh * dev_rows + bw  # device banners + separator line
     sub_area = bh + sub_h          # stream banner + image
     canvas_h = dev_h + bw + sub_area + bw   # top border + content + bottom border
 
@@ -747,22 +765,23 @@ def build_combined_frame(
 
     # ── per-stream sub-figures ────────────────────────────────────────────────
     for idx in range(n):
-        st  = states[idx]
-        x0  = bw + idx * col_w    # left edge of this sub-figure (after left border)
+        st = states[idx]
+        # left edge of this sub-figure (after left border)
+        x0 = bw + idx * col_w
 
         # White left border for every sub-figure
         canvas[:, x0 - bw:x0] = 255
 
         # Snapshot state for this sub-figure
         with st.lock:
-            hw_fps       = st.hw_fps
-            dis_fps      = st.dis_fps
-            fmt          = st.fmt
-            total_count  = st.count
-            first_cb     = st.first_cb_time
-            last_cb      = st.last_cb_time
-            od_dets      = list(st.od_detections)  # snapshot OD detections
-            od_cnt       = st.od_count
+            hw_fps = st.hw_fps
+            dis_fps = st.dis_fps
+            fmt = st.fmt
+            total_count = st.count
+            first_cb = st.first_cb_time
+            last_cb = st.last_cb_time
+            od_dets = list(st.od_detections)  # snapshot OD detections
+            od_cnt = st.od_count
 
         now = time.time()
         # Determine stream health status:
@@ -844,7 +863,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--serial", help="D555 serial(s). Comma-separated for multi-camera single-process mode (recommended). "
-                         "Example: --serial 333422301089,338122301551,338122303297")
+                    "Example: --serial 333422301089,338122301551,338122303297")
     ap.add_argument(
         "--stream",
         default="Depth",
@@ -852,7 +871,8 @@ def main():
               "IR1=Infrared_1, IR2=Infrared_2, IR3=Infrared_3, "
               "CompColor=CompressedColor.  e.g. Depth+IR1+IR2"),
     )
-    ap.add_argument("--topic", help="Single full topic path (overrides --serial/--stream)")
+    ap.add_argument(
+        "--topic", help="Single full topic path (overrides --serial/--stream)")
     ap.add_argument("--domain-id", type=int, help="Override ROS_DOMAIN_ID")
     ap.add_argument("--gui", nargs="?", const="on", default="off",
                     help="GUI mode: 'on' or omitted = enable GUI, 'off' = headless (default: headless).  "
@@ -886,7 +906,8 @@ def main():
     #   --serial 333422301089,338122301551,338122303297
     # All cameras share ONE DDS participant → avoids SPDP/SEDP race.
     serials_raw = args.serial or ""
-    serials = [s.strip() for s in re.split(r"[,\s]+", serials_raw) if s.strip()]
+    serials = [s.strip() for s in re.split(
+        r"[,\s]+", serials_raw) if s.strip()]
     if not args.topic and not serials:
         _auto = detect_serial()
         if _auto:
@@ -902,7 +923,8 @@ def main():
         streams_info = [(args.topic, args.topic.split("/")[-1])]
     else:
         raw_names = re.split(r"[+,]", args.stream.strip())
-        stream_names = [resolve_stream_name(s.strip()) for s in raw_names if s.strip()]
+        stream_names = [resolve_stream_name(
+            s.strip()) for s in raw_names if s.strip()]
         # Multi-serial mode: cross-product of serials × streams
         streams_info = []
         for sn in serials:
@@ -916,9 +938,10 @@ def main():
 
     # ── output file paths ─────────────────────────────────────────────────────
     _script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_tag  = _make_file_tag(serial, args.stream)
-    log_path  = os.path.join(_script_dir, f"{file_tag}.log")
-    pcap_path = os.path.join(_script_dir, f"{file_tag}.pcap") if debug_mode else None
+    file_tag = _make_file_tag(serial, args.stream)
+    log_path = os.path.join(_script_dir, f"{file_tag}.log")
+    pcap_path = os.path.join(
+        _script_dir, f"{file_tag}.pcap") if debug_mode else None
 
     # ── fetch device info (retry up to 2 extra times on transient failure) ────
     # In multi-serial mode, query ALL cameras to pre-warm DDS discovery.
@@ -929,7 +952,8 @@ def main():
         for sn in serials:
             _MAX_RETRIES = 3
             for _attempt in range(1, _MAX_RETRIES + 1):
-                print(f"  Querying Device.Info for SN:{sn} … (attempt {_attempt}/{_MAX_RETRIES})")
+                print(
+                    f"  Querying Device.Info for SN:{sn} … (attempt {_attempt}/{_MAX_RETRIES})")
                 _info = fetch_device_info(sn)
                 _sn_str = _info["sn_fw"].lower()
                 if "unavailable" not in _sn_str and "error" not in _sn_str:
@@ -960,16 +984,19 @@ def main():
             _cam_ip_val = _ip_m.group(1) if _ip_m else ""
             _nic = detect_camera_nic(_cam_ip_val)
             if _nic:
-                print(f"  [DEBUG] Auto-detected NIC '{_nic}' for camera IP {_cam_ip_val}")
+                print(
+                    f"  [DEBUG] Auto-detected NIC '{_nic}' for camera IP {_cam_ip_val}")
             else:
-                print(f"  [DEBUG] ✗ Could not auto-detect NIC for camera IP '{_cam_ip_val}'")
+                print(
+                    f"  [DEBUG] ✗ Could not auto-detect NIC for camera IP '{_cam_ip_val}'")
                 print(f"           Use --nic <interface> to specify manually.")
                 print(f"           Available interfaces: "
                       f"{subprocess.getoutput('ip -br link show | awk NR>1{{print $1}}').split()[:8]}")
                 pcap_path = None
 
         if pcap_path and _nic:
-            print(f"  [DEBUG] Starting tshark: -i {_nic} -a duration:{_PCAP_DURATION} -w {os.path.basename(pcap_path)}")
+            print(
+                f"  [DEBUG] Starting tshark: -i {_nic} -a duration:{_PCAP_DURATION} -w {os.path.basename(pcap_path)}")
             try:
                 pcap_proc = subprocess.Popen(
                     ["tshark", "-i", _nic, "-a", f"duration:{_PCAP_DURATION}",
@@ -988,12 +1015,14 @@ def main():
                     if err_out:
                         for ln in err_out.splitlines():
                             print(f"           {ln}")
-                    print(f"           cmd: tshark -i {_nic} -a duration:{_PCAP_DURATION} -w {pcap_path}")
+                    print(
+                        f"           cmd: tshark -i {_nic} -a duration:{_PCAP_DURATION} -w {pcap_path}")
                     pcap_proc = None
                     pcap_path = None
                 else:
                     print(f"  [DEBUG] ✓ tshark running (PID {pcap_proc.pid})")
-                    print(f"  [DEBUG] ✓ NIC:{_nic}  duration:{_PCAP_DURATION}s  → {pcap_path}")
+                    print(
+                        f"  [DEBUG] ✓ NIC:{_nic}  duration:{_PCAP_DURATION}s  → {pcap_path}")
             except FileNotFoundError:
                 print("  [DEBUG] ✗ tshark not found – pcap capture skipped")
                 print("           Install with: sudo apt-get install tshark")
@@ -1011,13 +1040,13 @@ def main():
     rclpy.init()
     n_streams = len(streams_info)
     states:      list[StreamState] = []
-    nodes:       list[Viewer]      = []
-    labels:      list[str]         = []
+    nodes:       list[Viewer] = []
+    labels:      list[str] = []
 
     for topic, label in streams_info:
         compressed = is_compressed_stream(label, topic)
-        node_name  = sanitize(f"d555_viewer_{label}_{uuid.uuid4().hex[:6]}")
-        st   = StreamState()
+        node_name = sanitize(f"d555_viewer_{label}_{uuid.uuid4().hex[:6]}")
+        st = StreamState()
         # Determine OD topic for this stream (--od flag, Color/CompressedColor only)
         od_topic = None
         if args.od:
@@ -1037,7 +1066,7 @@ def main():
     # ── one executor + spin thread per stream ─────────────────────────────────
     executors:    list = []
     spin_threads: list[threading.Thread] = []
-    stop_events:  list[threading.Event]  = []
+    stop_events:  list[threading.Event] = []
 
     for node in nodes:
         exc = rclpy.executors.SingleThreadedExecutor()
@@ -1120,7 +1149,7 @@ def main():
 
     # ── main loop ─────────────────────────────────────────────────────────────
     last_render = 0.0
-    last_log    = 0.0
+    last_log = 0.0
     _LOG_INTERVAL = 2.0    # print status line every 2s in headless mode
     exit_code = 0
 
@@ -1171,7 +1200,8 @@ def main():
                 cv2.imshow(WIN, canvas)
                 try:
                     total_hw = sum(st.hw_fps for st in states)
-                    cv2.setWindowTitle(WIN, f"{WIN}  |  total HW: {total_hw:.1f} fps")
+                    cv2.setWindowTitle(
+                        WIN, f"{WIN}  |  total HW: {total_hw:.1f} fps")
                 except Exception:
                     pass
 
@@ -1180,7 +1210,7 @@ def main():
                 last_log = now
                 for i, st in enumerate(states):
                     with st.lock:
-                        hw  = st.hw_fps
+                        hw = st.hw_fps
                         cnt = st.count
                         fcb = st.first_cb_time
                         lcb = st.last_cb_time
@@ -1192,7 +1222,8 @@ def main():
                         tag = "LOW_FPS"
                     else:
                         tag = "LIVE"
-                    _log(f"  {labels[i]:16s}  [{tag:7s}]  HW:{hw:5.1f}fps  cnt:{cnt}")
+                    _log(
+                        f"  {labels[i]:16s}  [{tag:7s}]  HW:{hw:5.1f}fps  cnt:{cnt}")
 
     except KeyboardInterrupt:  # fallback for environments that bypass signal handler
         _log("Ctrl-C – stopping.")
@@ -1210,7 +1241,8 @@ def main():
         # Check if pcap file exists and report its size
         if pcap_path and os.path.exists(pcap_path):
             pcap_size_kb = os.path.getsize(pcap_path) / 1024
-            _log(f"[DEBUG] ✓ pcap file exists: {os.path.basename(pcap_path)} ({pcap_size_kb:.1f} KB)")
+            _log(
+                f"[DEBUG] ✓ pcap file exists: {os.path.basename(pcap_path)} ({pcap_size_kb:.1f} KB)")
         elif pcap_path:
             _log(f"[DEBUG] ✗ pcap file NOT found (tshark may have failed)")
 
@@ -1233,7 +1265,8 @@ def main():
             pcap_removed = False
             if pcap_path:
                 pcap_removed = _try_remove(pcap_path)
-            print(f"  All streams PASS – artifacts {'auto-cleaned' if (log_removed or pcap_removed) else 'already cleaned'}.")
+            print(
+                f"  All streams PASS – artifacts {'auto-cleaned' if (log_removed or pcap_removed) else 'already cleaned'}.")
             if log_removed:
                 print(f"    Removed: {log_path}")
             if pcap_removed:

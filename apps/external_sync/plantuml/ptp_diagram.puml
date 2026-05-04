@@ -1,0 +1,18 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 12
+
+rectangle "Camera A\nsensor_ts = 1000" as CA
+rectangle "Camera B\nsensor_ts = 5000" as CB
+rectangle "Host Clock\nwall_time" as Host
+
+CA -right-> Host : rx_time = 99001\nptp_offset_A\n= 99001 − 1000\n= 98001
+CB -right-> Host : rx_time = 99005\nptp_offset_B\n= 99005 − 5000\n= 94005
+
+note bottom of Host
+  Corrected A: 1000 + 98001 = 99001
+  Corrected B: 5000 + 94005 = 99005
+  Delta = 4 (≈ transport jitter)
+  If external sync: delta ≈ 0
+end note
+@enduml
