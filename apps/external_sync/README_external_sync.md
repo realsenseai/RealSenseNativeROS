@@ -37,8 +37,8 @@ Sensor Timestamps).
 Frames are paired by **closest Sensor Timestamp** — for each Depth frame,
 the Color frame with the nearest Sensor Timestamp is matched (binary search,
 within half a frame period).  This is robust against different DDS stream
-start times and frame drops (see
-[Frame Pairing](#frame-pairing-by-closest-sensor-timestamp)).
+start times and frame drops (see the "Frame Pairing by Closest Sensor Timestamp"
+section below).
 
 ### Metadata JSON Structure
 
@@ -88,7 +88,7 @@ For multi-camera setups, an external trigger signal replaces the internal PWM.
 All cameras receive the same trigger pulse, so they all expose simultaneously.
 
 The hardware configuration is **fundamentally different** from Internal mode
-(see [Source Code Analysis](#source-code-analysis-internal-vs-external-mode) below):
+(see the "Source Code Analysis: Internal vs External Mode" section below):
 the IPU PWM controller is disabled (`pwm_mode=0`), and both sensors are
 configured to receive trigger pulses from the external STROBE input pin
 (USB SBU1/2) instead of the internal `FW_GLOBAL` source.
@@ -326,8 +326,8 @@ ros2 daemon stop && sleep 1 && ros2 daemon start
 ### Test A: Intra-Camera Sync
 
 Both sensors are driven by the same trigger source (internal PWM or external
-STROBE).  Frames are paired by closest Sensor Timestamp (see
-[Frame Pairing](#frame-pairing-by-closest-sensor-timestamp)), and the
+STROBE).  Frames are paired by closest Sensor Timestamp (see the
+"Frame Pairing by Closest Sensor Timestamp" section), and the
 **Sensor Timestamp** offset (Color − Depth) is analyzed.
 
 The test iterates over the configured FPS values (default: **30, 15**).  For
@@ -357,7 +357,7 @@ The test checks three criteria:
 
 ![Timing Diagram](images/timing_diagram.svg)
 
-Source: [Timing Diagram PlantUML Source](plantuml/timing_diagram.puml)
+PlantUML source: `plantuml/timing_diagram.puml`
 
 ### Test B: PTP Cross-Validation (--enable-ptp)
 
@@ -406,7 +406,7 @@ graph LR
 > - Delta = 4 (≈ transport jitter)
 > - If external sync: delta ≈ 0
 
-Source: [PTP Diagram PlantUML Source](plantuml/ptp_diagram.puml)
+PlantUML source: `plantuml/ptp_diagram.puml`
 
 **Output**: The tool displays PTP-corrected timestamps from all cameras,
 showing whether they actually see the same physical moment.  This is
@@ -438,7 +438,7 @@ graph TD
 > **Test B notes:**
 > - Independent validation using host wall-clock as common reference.
 
-Source: [Design Summary PlantUML Source](plantuml/design_summary.puml)
+PlantUML source: `plantuml/design_summary.puml`
 
 **Verification matrix:**
 
