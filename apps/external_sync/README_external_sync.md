@@ -220,6 +220,9 @@ python3 tests/scripts/test_external_sync.py --help
 | `--min-cameras N`      | 0       | Minimum cameras to discover (retries with daemon restart if not met)                       |
 | `--fps FPS1,FPS2,...`  | `30,15` | Comma-separated FPS values to test.  Sync passes if **any** FPS produces a passing result. |
 
+<details>
+<summary>Command examples, technical details, and sample output</summary>
+
 ### Examples
 
 ```bash
@@ -702,6 +705,8 @@ ANALYSIS (sync_mode=External)
    x B: 123456<->789012 / PTP alignment = 8.200ms
 ========================================================================
 ```
+
+</details>
 
 ## Exit Code
 

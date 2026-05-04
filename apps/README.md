@@ -8,7 +8,7 @@ Sample applications for the Intel RealSense D555 camera's native ROS2 interface.
 
 ---
 
-## `show_ros_image.py` — Stream Viewer & Tester
+## Stream Viewer & Tester
 
 A multi-stream ROS2 image viewer with **GUI** (tiled display) and **headless** (log-only) modes.
 Designed for both interactive viewing and automated CI/regression testing.
@@ -48,6 +48,9 @@ python3 show_ros_image.py --gui --serial 343122300393,344522301530 --stream Dept
 # Debug mode with pcap capture
 python3 show_ros_image.py --debug --serial 343122300393 --stream Color --duration 30
 ```
+
+<details>
+<summary>Stream viewer technical reference</summary>
 
 ### Stream Aliases
 
@@ -102,9 +105,11 @@ Exit: `q` or close window (GUI), `Ctrl-C` or `--duration` timeout (headless).
 | `numpy` | `pip3 install numpy` |
 | `tshark` (optional, `--debug`) | `sudo apt install tshark` |
 
+</details>
+
 ---
 
-## `d555_3d_reconstruction_v4.py` — 3D Reconstruction Viewer
+## 3D Reconstruction Viewer
 
 An interactive 3D point cloud reconstruction application with real-time rotating views,
 metadata display, and PLY export.
@@ -131,6 +136,9 @@ python3 d555_3d_reconstruction_v4.py -gui
 # Headless mode — subscribe and process without display
 python3 d555_3d_reconstruction_v4.py
 ```
+
+<details>
+<summary>3D reconstruction technical reference</summary>
 
 ### Keyboard Controls
 
@@ -173,9 +181,11 @@ python3 d555_3d_reconstruction_v4.py
 | `numpy` | `pip3 install numpy` |
 | `open3d` (optional, for PLY export) | `pip3 install open3d` |
 
+</details>
+
 ---
 
-## `external_sync/` — Frame Sync Verification
+## Frame Sync Verification
 
 See `external_sync/README_external_sync.md` for the multi-camera
 synchronization verification tool.
