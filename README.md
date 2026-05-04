@@ -473,7 +473,8 @@ rclpy.spin(node)
 
 The device exposes the following services under the namespace `/<DeviceModel>_<SerialNumber>`:
 
-#### `hw_reset`
+#### Hardware Reset
+- **Service name:** `hw_reset`
 - Reset the device. All streams are stopped.
 - **Type:** `std_srvs/srv/Empty`
 - Call example:
@@ -482,7 +483,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - **Note:** The device will disconnect from DDS and reappear after approximately 5–10 seconds.
 
-#### `get_device_info_std`
+#### Device Information
+- **Service name:** `get_device_info_std`
 - Retrieve device information — serial number, firmware version, etc.
 - **Type:** `std_srvs/srv/Trigger`
 - Call example:
@@ -497,7 +499,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   | `product` | `"D555"` |
   | `firmware` | `"7.58.38048.7889"` |
 
-#### help
+#### Help
+- **Service name:** `help`
 - List all available services and their types.
 - **Type:** `std_srvs/srv/Trigger`
 - Call example:
@@ -505,7 +508,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ros2 service call /D555_343122300393/help std_srvs/srv/Trigger
   ```
 
-#### `list_parameters`
+#### List Parameters
+- **Service name:** `list_parameters`
 - Returns a list of all available parameters.
 - **Type:** `rcl_interfaces/srv/ListParameters`
 - Call example:
@@ -513,7 +517,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ros2 service call /D555_343122300393/list_parameters rcl_interfaces/srv/ListParameters
   ```
 
-#### `get_parameters`
+#### Get Parameters
+- **Service name:** `get_parameters`
 - Retrieve current values of specified parameters.
 - **Type:** `rcl_interfaces/srv/GetParameters`
 - Call example:
@@ -524,7 +529,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - Returns `PARAMETER_NOT_SET` for unknown parameters.
 
-#### `set_parameters`
+#### Set Parameters
+- **Service name:** `set_parameters`
 - Set parameter values with range validation.
 - **Type:** `rcl_interfaces/srv/SetParameters`
 - Call example:
@@ -535,7 +541,8 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
   ```
 - **Response:** `successful` (bool) + `reason` (string) per parameter.
 
-#### `describe_parameters`
+#### Describe Parameters
+- **Service name:** `describe_parameters`
 - Returns metadata (type, description, range) for parameters.
 - **Type:** `rcl_interfaces/srv/DescribeParameters`
 - Call example:
