@@ -137,6 +137,9 @@ ros2 service list | grep D555
 
 <hr>
 
+<details>
+<summary>Detailed ROS interface reference</summary>
+
 ### Camera Name and Namespace
 
 The D555 firmware automatically names its ROS2 node and topics based on the device model and serial number.
@@ -604,6 +607,8 @@ rclpy.shutdown()
 ```
 
 <hr>
+
+</details>
 
 ## Performance & Constraints
 
