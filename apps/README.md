@@ -8,7 +8,7 @@ Sample applications for the Intel RealSense D555 camera's native ROS2 interface.
 
 ---
 
-## show_ros_image.py — Stream Viewer & Tester
+## `show_ros_image.py` — Stream Viewer & Tester
 
 A multi-stream ROS2 image viewer with **GUI** (tiled display) and **headless** (log-only) modes.
 Designed for both interactive viewing and automated CI/regression testing.
@@ -104,7 +104,7 @@ Exit: `q` or close window (GUI), `Ctrl-C` or `--duration` timeout (headless).
 
 ---
 
-## d555_3d_reconstruction_v4.py — 3D Reconstruction Viewer
+## `d555_3d_reconstruction_v4.py` — 3D Reconstruction Viewer
 
 An interactive 3D point cloud reconstruction application with real-time rotating views,
 metadata display, and PLY export.
@@ -175,7 +175,7 @@ python3 d555_3d_reconstruction_v4.py
 
 ---
 
-## external_sync/ — Frame Sync Verification
+## `external_sync/` — Frame Sync Verification
 
 See [external_sync/README_external_sync.md](external_sync/README_external_sync.md) for the
 multi-camera synchronization verification tool.
