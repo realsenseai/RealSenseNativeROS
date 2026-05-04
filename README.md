@@ -18,22 +18,22 @@
 <hr>
 
 ## Table of Contents
-  * [Overview](#overview)
-  * [Key Differences from realsense-ros Wrapper](#key-differences-from-realsense-ros-wrapper)
-  * [Installation](#installation)
-  * [Usage](#usage)
-     * [Device Discovery](#device-discovery)
-     * [Camera Name and Namespace](#camera-name-and-namespace)
-     * [Parameters](#parameters)
-     * [ROS2/Robot vs Optical/Camera Coordination Systems](#ros2robot-vs-opticalcamera-coordination-systems)
-     * [TF from coordinate A to coordinate B](#tf-from-coordinate-a-to-coordinate-b)
-     * [Extrinsics from sensor A to sensor B](#extrinsics-from-sensor-a-to-sensor-b)
-     * [Published Topics](#published-topics)
-     * [Metadata Topic](#metadata-topic)
-     * [Available Services](#available-services)
-  * [Troubleshooting](#troubleshooting)
-  * [Contributing](#contributing)
-  * [License](#license)
+  * Overview
+  * Key Differences from realsense-ros Wrapper
+  * Installation
+  * Usage
+    * Device Discovery
+    * Camera Name and Namespace
+    * Parameters
+    * ROS2/Robot vs Optical/Camera Coordination Systems
+    * TF from coordinate A to coordinate B
+    * Extrinsics from sensor A to sensor B
+    * Published Topics
+    * Metadata Topic
+    * Available Services
+  * Troubleshooting
+  * Contributing
+  * License
 
 <hr>
 
@@ -81,14 +81,14 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 
 Follow the official installation guide for your platform:
 
-- **Ubuntu 22.04:** [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
+- **Ubuntu 22.04:** ROS2 Humble installation guide at `https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html`
 - **Ubuntu 24.04:** ROS2 Humble is not natively packaged for Ubuntu 24.04. Use a Docker container with Ubuntu 22.04 and ROS2 Humble installed.
 
 ### Step 1.5: Update Device Firmware
 
 For the best experience, ensure your D555 is running the latest firmware:
 
-1. Download the latest firmware from the [RealSense D500 firmware releases](https://dev.realsenseai.com/docs/firmware-release-d500) page (including early-access builds when available).
+1. Download the latest firmware from the RealSense D500 firmware releases page: `https://dev.realsenseai.com/docs/firmware-release-d500` (including early-access builds when available).
 2. Use `realsense-viewer` or `rs-fw-update` (from `librealsense`) to flash the firmware via USB.
 3. After updating, the device will reboot and reconnect automatically.
 
@@ -293,7 +293,7 @@ ros2 param get /D555_343122300393 Depth.option.Exposure
 - **Point of View:** Imagine standing behind the camera, looking forward.
 - **ROS2 Coordinate System:** (X: Forward, Y: Left, Z: Up)
 - **Camera Optical Coordinate System:** (X: Right, Y: Down, Z: Forward)
-- **References:** [REP-0103](https://www.ros.org/reps/rep-0103.html#coordinate-frame-conventions), [REP-0105](https://www.ros.org/reps/rep-0105.html#coordinate-frames)
+- **References:** `REP-0103` and `REP-0105`
 - All image/depth data is published in the **optical** coordinate frame.
 - The `/tf_static` topic provides transforms between the optical and ROS coordinate frames.
 
@@ -301,7 +301,7 @@ ros2 param get /D555_343122300393 Depth.option.Exposure
 
 ### TF from coordinate A to coordinate B
 
-- A TF message expresses a transform from coordinate frame `header.frame_id` (source) to `child_frame_id` (destination). [Reference](http://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/Transform.html).
+- A TF message expresses a transform from coordinate frame `header.frame_id` (source) to `child_frame_id` (destination). Reference: `http://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/Transform.html`.
 - In RealSense cameras, the origin point (0,0,0) is at the **left IR (`Infrared_1`)** sensor, named `camera_link`.
 - Depth, left IR, and `camera_link` coordinates converge together.
 - The D555 firmware publishes static TFs to `/tf_static` between each sensor coordinate frame and the camera base (`camera_link`), as well as from each sensor's ROS coordinates to its optical coordinates.
