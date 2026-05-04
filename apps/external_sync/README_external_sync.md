@@ -357,7 +357,7 @@ The test checks three criteria:
 
 ![Timing Diagram](images/timing_diagram.svg)
 
-Source: [timing_diagram.puml](plantuml/timing_diagram.puml)
+Source: [Timing Diagram PlantUML Source](plantuml/timing_diagram.puml)
 
 ### Test B: PTP Cross-Validation (--enable-ptp)
 
@@ -372,15 +372,15 @@ support.  The idea:
    - **Host time**: `time.time()` at the moment of ROS callback (host clock)
 
 2. The **PTP offset** for each camera is:
-   ```
-   ptp_offset = host_time − sensor_timestamp
-   ```
+  ```
+  PTP offset = host time − sensor timestamp
+  ```
 
 3. Applying the PTP offset converts any camera timestamp to the host
-   wall-clock domain:
-   ```
-   corrected_time = sensor_timestamp + ptp_offset
-   ```
+  wall-clock domain:
+  ```
+  corrected time = sensor timestamp + PTP offset
+  ```
 
 4. Because all cameras are compared against the **same host clock**, the
    transport latency (similar for all USB cameras on the same host) cancels
@@ -396,8 +396,8 @@ If cameras share an external trigger:
 
 ```mermaid
 graph LR
-    CA["Camera A<br/>sensor_ts = 1000"] -->|"rx_time = 99001<br/>ptp_offset_A<br/>= 99001 − 1000<br/>= 98001"| Host["Host Clock<br/>wall_time"]
-    CB["Camera B<br/>sensor_ts = 5000"] -->|"rx_time = 99005<br/>ptp_offset_B<br/>= 99005 − 5000<br/>= 94005"| Host
+  CA["Camera A<br/>sensor timestamp = 1000"] -->|"receive time = 99001<br/>PTP offset A<br/>= 99001 − 1000<br/>= 98001"| Host["Host Clock<br/>wall time"]
+  CB["Camera B<br/>sensor timestamp = 5000"] -->|"receive time = 99005<br/>PTP offset B<br/>= 99005 − 5000<br/>= 94005"| Host
 ```
 
 > **PTP Correction:**
@@ -406,7 +406,7 @@ graph LR
 > - Delta = 4 (≈ transport jitter)
 > - If external sync: delta ≈ 0
 
-Source: [ptp_diagram.puml](plantuml/ptp_diagram.puml)
+Source: [PTP Diagram PlantUML Source](plantuml/ptp_diagram.puml)
 
 **Output**: The tool displays PTP-corrected timestamps from all cameras,
 showing whether they actually see the same physical moment.  This is
@@ -438,7 +438,7 @@ graph TD
 > **Test B notes:**
 > - Independent validation using host wall-clock as common reference.
 
-Source: [design_summary.puml](plantuml/design_summary.puml)
+Source: [Design Summary PlantUML Source](plantuml/design_summary.puml)
 
 **Verification matrix:**
 
