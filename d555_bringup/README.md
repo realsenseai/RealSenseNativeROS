@@ -1,4 +1,4 @@
-# d555_bringup
+# D555_bringup
 
 Host-side ROS 2 launch package for the **RealSense D555** camera.
 
@@ -10,6 +10,7 @@ color format conversion, depth alignment, and point cloud generation.
 
 - **ROS 2 Humble** (Ubuntu 22.04)
 - **D555 camera** connected via Ethernet (default IP `192.168.11.55`)
+- **Firmware** ≥ 7.58 (for Aligned_Depth_To_Color and metadata topics)
 - `ROS_DOMAIN_ID` matching the device (e.g., `export ROS_DOMAIN_ID=2`)
 
 Install dependencies:
@@ -44,6 +45,10 @@ ros2 launch d555_bringup d555_bringup.launch.py serial:=343122300393 \
 ros2 launch d555_bringup d555_bringup.launch.py serial:=343122300393 \
     enable_pointcloud:=false
 
+# Depth-only point cloud (no color needed)
+ros2 launch d555_bringup d555_bringup.launch.py serial:=343122300393 \
+    pointcloud_type:=xyz enable_color_relay:=false
+
 # Use on-device aligned depth instead of host-side alignment
 ros2 launch d555_bringup d555_bringup.launch.py serial:=343122300393 \
     use_device_align:=true
@@ -70,6 +75,8 @@ ros2 launch d555_bringup d555_bringup.launch.py serial:=343122300393 \
 | `cam_roll` / `cam_pitch` / `cam_yaw` | `0.0` | Mounting rotation in radians |
 | `enable_color_relay` | `true` | Launch the YUV → RGB8 color relay |
 | `enable_pointcloud` | `true` | Launch the point cloud node |
+| `enable_depth_align` | `true` | Launch host-side depth alignment (Mode A only) |
+| `pointcloud_type` | `xyzrgb` | Point cloud type: `xyzrgb` (colored) or `xyz` (depth only) |
 | `use_device_align` | `false` | Use on-device aligned depth (skip host `register_node`) |
 
 ## Depth Alignment Modes
@@ -105,16 +112,4 @@ consumes the pre-aligned depth stream.
 
 ## License
 
-Copyright 2026 RealSense
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-> http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Apache-2.0 — see [LICENSE](../LICENSE).

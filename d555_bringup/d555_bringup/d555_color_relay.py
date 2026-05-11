@@ -63,31 +63,32 @@ class D555ColorRelay(Node):
     def _on_color(self, msg: Image):
         encoding = msg.encoding.lower()
 
-        if encoding in ('rgb8', 'bgr8'):
-            # Passthrough — no conversion needed
-            out = msg
-            out.encoding = encoding
+        if encoding == 'rgb8':
+            # Already RGB8 — publish as-is (no mutation of input msg)
+            self._pub.publish(msg)
+            return
+
+        # Convert to RGB8 via OpenCV
+        cv_image = self._bridge.imgmsg_to_cv2(
+            msg, desired_encoding='passthrough')
+
+        if encoding == 'yuv422_yuy2':
+            rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUY2)
+        elif encoding == 'nv12':
+            rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_NV12)
+        elif encoding == 'yuyv':
+            rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUYV)
+        elif encoding == 'bgr8':
+            rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         else:
-            # Convert YUV → RGB8 via OpenCV
-            cv_image = self._bridge.imgmsg_to_cv2(
-                msg, desired_encoding='passthrough')
+            self.get_logger().warn(
+                f'Unknown encoding "{msg.encoding}", passing through',
+                throttle_duration_sec=5.0)
+            self._pub.publish(msg)
+            return
 
-            if encoding == 'yuv422_yuy2':
-                rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUY2)
-            elif encoding == 'nv12':
-                rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_NV12)
-            elif encoding == 'yuyv':
-                rgb = cv2.cvtColor(cv_image, cv2.COLOR_YUV2RGB_YUYV)
-            else:
-                self.get_logger().warn(
-                    f'Unknown encoding "{msg.encoding}", passing through',
-                    throttle_duration_sec=5.0)
-                self._pub.publish(msg)
-                return
-
-            out = self._bridge.cv2_to_imgmsg(rgb, encoding='rgb8')
-            out.header = msg.header
-
+        out = self._bridge.cv2_to_imgmsg(rgb, encoding='rgb8')
+        out.header = msg.header
         self._pub.publish(out)
 
 

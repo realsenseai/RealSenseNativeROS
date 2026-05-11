@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# D555 Bringup — Default Parameters
+# D555 Bringup — Default Parameters (Reference Only)
+#
+# NOTE: This file is NOT loaded by the launch file. All defaults are defined
+# in DeclareLaunchArgument() in d555_bringup.launch.py. This file serves as
+# a reference for available parameters and their default values.
 #
 # Override via launch arguments:
 #   ros2 launch d555_bringup d555_bringup.launch.py serial:=... cam_x:=0.30
@@ -36,4 +40,6 @@ cam_yaw: 0.0
 # Feature toggles
 use_device_align: false
 enable_pointcloud: true
+enable_depth_align: true
 enable_color_relay: true
+pointcloud_type: "xyzrgb"   # "xyzrgb" (colored) or "xyz" (depth only)

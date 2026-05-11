@@ -37,6 +37,31 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+def _make_pc_node(camera_name, depth_topic, camera_info_topic,
+                  device_prefix, pc_type='xyzrgb'):
+    """Create a point_cloud node (xyzrgb or xyz)."""
+    executable = f'point_cloud_{pc_type}_node'
+    if pc_type == 'xyzrgb':
+        remappings = [
+            ('depth_registered/image_rect', depth_topic),
+            ('rgb/image_rect_color', f'/{camera_name}/color/image_raw'),
+            ('rgb/camera_info', camera_info_topic),
+            ('points', f'/{camera_name}/points2'),
+        ]
+    else:
+        remappings = [
+            ('image_rect', depth_topic),
+            ('points', f'/{camera_name}/points2'),
+        ]
+    return Node(
+        package='depth_image_proc',
+        executable=executable,
+        name=f'point_cloud_{pc_type}',
+        namespace=camera_name,
+        remappings=remappings,
+    )
+
+
 def _launch_setup(context):
     # Resolve all arguments
     serial = LaunchConfiguration('serial').perform(context)
@@ -51,7 +76,9 @@ def _launch_setup(context):
     cam_yaw = LaunchConfiguration('cam_yaw').perform(context)
     use_device_align = LaunchConfiguration('use_device_align').perform(context)
     enable_pointcloud = LaunchConfiguration('enable_pointcloud').perform(context)
+    enable_depth_align = LaunchConfiguration('enable_depth_align').perform(context)
     enable_color_relay = LaunchConfiguration('enable_color_relay').perform(context)
+    pointcloud_type = LaunchConfiguration('pointcloud_type').perform(context)
 
     # Device topic prefix: /realsense/D555_<serial>
     device_prefix = f'/realsense/D555_{serial}'
@@ -93,10 +120,10 @@ def _launch_setup(context):
         )
         nodes.append(color_relay)
 
-    # ── 3 & 4. Depth alignment + Point cloud ──
+    # ── 3. Depth alignment + Point cloud ──
     if use_device_align.lower() != 'true':
         # Mode A: Host-side alignment via register_node
-        if enable_pointcloud.lower() == 'true':
+        if enable_depth_align.lower() == 'true':
             register = Node(
                 package='depth_image_proc',
                 executable='register_node',
@@ -109,53 +136,25 @@ def _launch_setup(context):
                     ('depth_registered/image_rect',
                      f'/{camera_name}/aligned_depth/image_raw'),
                 ],
-                parameters=[{
-                    'use_sim_time': False,
-                }],
             )
             nodes.append(register)
 
-            pc_node = Node(
-                package='depth_image_proc',
-                executable='point_cloud_xyzrgb_node',
-                name='point_cloud_xyzrgb',
-                namespace=camera_name,
-                remappings=[
-                    ('depth_registered/image_rect',
-                     f'/{camera_name}/aligned_depth/image_raw'),
-                    ('rgb/image_rect_color',
-                     f'/{camera_name}/color/image_raw'),
-                    ('rgb/camera_info',
-                     f'{device_prefix}_Color/camera_info'),
-                    ('points', f'/{camera_name}/points2'),
-                ],
-                parameters=[{
-                    'use_sim_time': False,
-                }],
-            )
-            nodes.append(pc_node)
+        if enable_pointcloud.lower() == 'true':
+            depth_topic = (f'/{camera_name}/aligned_depth/image_raw'
+                           if enable_depth_align.lower() == 'true'
+                           else f'{device_prefix}_Depth')
+            info_topic = f'{device_prefix}_Color/camera_info'
+            nodes.append(_make_pc_node(
+                camera_name, depth_topic, info_topic,
+                device_prefix, pointcloud_type))
     else:
         # Mode B: Device provides aligned depth
         if enable_pointcloud.lower() == 'true':
-            pc_node = Node(
-                package='depth_image_proc',
-                executable='point_cloud_xyzrgb_node',
-                name='point_cloud_xyzrgb',
-                namespace=camera_name,
-                remappings=[
-                    ('depth_registered/image_rect',
-                     f'{device_prefix}_Aligned_Depth_To_Color'),
-                    ('rgb/image_rect_color',
-                     f'/{camera_name}/color/image_raw'),
-                    ('rgb/camera_info',
-                     f'{device_prefix}_Aligned_Depth_To_Color/camera_info'),
-                    ('points', f'/{camera_name}/points2'),
-                ],
-                parameters=[{
-                    'use_sim_time': False,
-                }],
-            )
-            nodes.append(pc_node)
+            nodes.append(_make_pc_node(
+                camera_name,
+                f'{device_prefix}_Aligned_Depth_To_Color',
+                f'{device_prefix}_Aligned_Depth_To_Color/camera_info',
+                device_prefix, pointcloud_type))
 
     return nodes
 
@@ -205,8 +204,14 @@ def generate_launch_description():
             'enable_pointcloud', default_value='true',
             description='Launch point cloud generation node'),
         DeclareLaunchArgument(
+            'enable_depth_align', default_value='true',
+            description='Launch host-side depth-to-color alignment (Mode A)'),
+        DeclareLaunchArgument(
             'enable_color_relay', default_value='true',
             description='Launch YUV→RGB8 color relay node'),
+        DeclareLaunchArgument(
+            'pointcloud_type', default_value='xyzrgb',
+            description='Point cloud type: xyzrgb (colored) or xyz (depth only)'),
 
         OpaqueFunction(function=_launch_setup),
     ])
