@@ -187,5 +187,5 @@ python3 d555_3d_reconstruction_v4.py
 
 ## Frame Sync Verification
 
-See `external_sync/README_external_sync.md` for the multi-camera
+See [external_sync/README_external_sync.md](external_sync/README_external_sync.md) for the multi-camera
 synchronization verification tool.
