@@ -283,7 +283,8 @@ def _try_read_device_ufo_from_serial() -> str:
     return matches[-1] if matches else "unknown"
 
 
-def check_stream_network_preconditions(device_info: dict) -> bool:
+def check_stream_network_preconditions(device_info: dict,
+                                       check_ufo: bool = False) -> bool:
     """Dump device MTU/traffic_delay/UFO and verify host MTU matches."""
     camera_ip = None
     device_mtu = None
@@ -306,7 +307,7 @@ def check_stream_network_preconditions(device_info: dict) -> bool:
     device_mtu = device_mtu or rs_cfg.get("device_mtu")
     traffic_delay_us = traffic_delay_us or rs_cfg.get("traffic_delay_us")
 
-    ufo_state = _try_read_device_ufo_from_serial()  # optional
+    ufo_state = _try_read_device_ufo_from_serial() if check_ufo else "skipped"
 
     print("\n=== Pre-stream Network Check ===")
     print(f"Device IP            : {camera_ip or 'N/A'}")
@@ -965,7 +966,7 @@ def main():
                 device_info = _info  # use primary serial's info for banner/NIC
             print(f"  Device: {_info['sn_fw']}")
 
-    if not check_stream_network_preconditions(device_info):
+    if not check_stream_network_preconditions(device_info, check_ufo=debug_mode):
         print("ERROR: pre-stream network check failed (MTU mismatch or missing net info)", file=sys.stderr)
         return 4
 
@@ -1109,7 +1110,12 @@ def main():
             cv2.destroyAllWindows()
 
     # ── log file handle ───────────────────────────────────────────────────────
-    log_fh = open(log_path, "w")
+    log_fh = None
+    try:
+        log_fh = open(log_path, "w")
+    except OSError as e:
+        print(f"[WARN] Cannot open log file {log_path}: {e}")
+        sys.exit(1)
     start_wall = time.time()
 
     def _log(msg: str):

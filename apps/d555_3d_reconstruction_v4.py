@@ -121,7 +121,8 @@ class D555ReconstructionV4(Node):
         # Transforms
         self.transforms: Dict[str, Transform] = {}
 
-        # Frame buffers
+        # Frame buffers (protected by _frame_lock)
+        self._frame_lock = threading.Lock()
         self.depth_frame: Optional[np.ndarray] = None
         self.color_frame: Optional[np.ndarray] = None
         self.depth_timestamp = 0.0
@@ -242,16 +243,18 @@ class D555ReconstructionV4(Node):
             else:
                 return
 
-            self.depth_frame = depth
-            self.depth_timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-            self.depth_frame_counter += 1
-            self.stats['depth_frames'] += 1
+            with self._frame_lock:
+                self.depth_frame = depth
+                self.depth_timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+                self.depth_frame_counter += 1
+                self.stats['depth_frames'] += 1
+                color_snap = self.color_frame.copy() if self.color_frame is not None else None
 
             if self.is_recording:
                 self.recorded_frames.append({
                     'ts': self.depth_timestamp,
                     'depth': depth.copy(),
-                    'color': self.color_frame.copy() if self.color_frame is not None else None
+                    'color': color_snap
                 })
         except Exception as e:
             self.get_logger().error(f"Depth error: {e}")
@@ -277,10 +280,11 @@ class D555ReconstructionV4(Node):
             else:
                 return
 
-            self.color_frame = color
-            self.color_timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-            self.color_frame_counter += 1
-            self.stats['color_frames'] += 1
+            with self._frame_lock:
+                self.color_frame = color
+                self.color_timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+                self.color_frame_counter += 1
+                self.stats['color_frames'] += 1
         except Exception as e:
             self.get_logger().error(f"Color error: {e}")
 
@@ -331,11 +335,13 @@ class D555ReconstructionV4(Node):
 
     def _process_frame(self):
         """Generate point cloud with both RGB and depth colors."""
-        if self.depth_frame is None or not self.depth_intrinsics.is_valid():
-            return
+        with self._frame_lock:
+            if self.depth_frame is None or not self.depth_intrinsics.is_valid():
+                return
+            depth = self.depth_frame.copy()
+            color_snap = self.color_frame.copy() if self.color_frame is not None else None
 
         try:
-            depth = self.depth_frame
             intrinsics = self.depth_intrinsics
 
             h, w = depth.shape
@@ -354,13 +360,12 @@ class D555ReconstructionV4(Node):
 
             # RGB colors from camera
             rgb_colors = None
-            if self.color_frame is not None:
-                color_h, color_w = self.color_frame.shape[:2]
+            if color_snap is not None:
+                color_h, color_w = color_snap.shape[:2]
                 scale_u, scale_v = color_w / w, color_h / h
                 cu = np.clip((u[valid] * scale_u).astype(int), 0, color_w - 1)
                 cv = np.clip((v[valid] * scale_v).astype(int), 0, color_h - 1)
-                rgb_colors = self.color_frame[cv,
-                                              cu].astype(np.float32) / 255.0
+                rgb_colors = color_snap[cv, cu].astype(np.float32) / 255.0
 
             # Depth-based turbo colors
             z_valid = z[valid]
@@ -528,11 +533,11 @@ class ProGUI:
         else:
             c = np.full((len(u), 3), 200, dtype=np.uint8)
 
-        # Draw points
+        # Draw points (vectorized pixel assignment for performance)
         max_points = min(len(u), 100000)
-        for i in range(max_points):
-            cv2.circle(img, (u[i], v[i]), 1, (int(c[i, 2]),
-                       int(c[i, 1]), int(c[i, 0])), -1)
+        valid_u = u[:max_points]
+        valid_v = v[:max_points]
+        img[valid_v, valid_u] = c[:max_points, ::-1]  # RGB→BGR
 
         # Header
         self._draw_header(img, title, width)

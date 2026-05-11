@@ -123,18 +123,24 @@ def _flush_ros2_daemon():
     causing `ros2 node list` / `ros2 topic list` to return incomplete
     or empty results.  Restarting the daemon forces re-discovery.
     """
-    subprocess.run("ros2 daemon stop", shell=True,
+    subprocess.run(["ros2", "daemon", "stop"],
                    capture_output=True, timeout=5)
     time.sleep(1)
-    subprocess.run("ros2 daemon start", shell=True,
+    subprocess.run(["ros2", "daemon", "start"],
                    capture_output=True, timeout=5)
     time.sleep(2)
 
 
-def run_cmd(cmd: str, timeout: int = 15) -> Tuple[int, str]:
+def run_cmd(cmd, timeout: int = 15) -> Tuple[int, str]:
+    """Run a command and return (returncode, stdout).
+    cmd can be a list[str] (preferred, no shell) or a str (uses shlex.split).
+    """
     global _ros2_cmd_count
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+        if isinstance(cmd, str):
+            import shlex
+            cmd = shlex.split(cmd)
+        r = subprocess.run(cmd, capture_output=True, text=True,
                            timeout=timeout)
         _ros2_cmd_count += 1
         # Proactively flush daemon every 20 ros2 CLI calls to avoid
@@ -348,7 +354,10 @@ def analyze_ptp_sync(
 
         diffs = []
         for rt in ref_ptp:
-            closest_val = min(cam_ptp, key=lambda ct: abs(ct - rt))
+            idx = bisect.bisect_left(cam_ptp, rt)
+            candidates = [i for i in (idx - 1, idx) if 0 <= i < len(cam_ptp)]
+            closest_val = min((cam_ptp[i] for i in candidates),
+                              key=lambda ct: abs(ct - rt))
             diffs.append(abs(rt - closest_val) / 1000.0)
 
         avg_diff = statistics.mean(diffs)
@@ -822,10 +831,10 @@ OUTPUT
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    # No arguments -> print usage and exit
+    # No arguments -> show help and exit with non-zero (nothing tested)
     if len(sys.argv) == 1:
         print_usage()
-        sys.exit(0)
+        sys.exit(2)
 
     parser = argparse.ArgumentParser(
         description="RealSense D555e Sync Verification",
@@ -901,7 +910,9 @@ def main():
     camera_fps_pass: Dict[str, Dict[int, bool]] = defaultdict(dict)
     fps_results: Dict[int, List[SyncTestResult]] = {}
 
-    for fps_val in args.fps_list:
+    rclpy.init()
+    try:
+      for fps_val in args.fps_list:
         print(f"\n{'=' * 60}")
         print(f"FPS = {fps_val}")
         print(f"{'=' * 60}")
@@ -920,29 +931,25 @@ def main():
             num_rounds = 1
 
         phase1_data: List[Dict[str, CameraData]] = []
-        rclpy.init()
-        try:
-            for ri in range(num_rounds):
-                print(f"\n[Step 3] FPS={fps_val} -- Round {ri + 1}/"
-                      f"{num_rounds}: collecting {args.samples} frames ...")
+        for ri in range(num_rounds):
+            print(f"\n[Step 3] FPS={fps_val} -- Round {ri + 1}/"
+                  f"{num_rounds}: collecting {args.samples} frames ...")
 
-                collector = FrameCollector(nodes, args.samples)
-                data = collector.collect(timeout_sec=args.collect_timeout)
-                collector.destroy_node()
+            collector = FrameCollector(nodes, args.samples)
+            data = collector.collect(timeout_sec=args.collect_timeout)
+            collector.destroy_node()
 
-                for serial, cam in sorted(data.items()):
-                    print(f"  {serial}: depth_meta="
-                          f"{len(cam.depth_samples)} "
-                          f"color_meta={len(cam.color_samples)}")
+            for serial, cam in sorted(data.items()):
+                print(f"  {serial}: depth_meta="
+                      f"{len(cam.depth_samples)} "
+                      f"color_meta={len(cam.color_samples)}")
 
-                phase1_data.append(data)
+            phase1_data.append(data)
 
-                if multi_camera and ri < num_rounds - 1:
-                    print("\n  Stop/start streams (no hw_reset) ...")
-                    stop_start_streams(nodes,
-                                       restart_wait=args.restart_wait)
-        finally:
-            rclpy.shutdown()
+            if multi_camera and ri < num_rounds - 1:
+                print("\n  Stop/start streams (no hw_reset) ...")
+                stop_start_streams(nodes,
+                                   restart_wait=args.restart_wait)
 
         # Analyze -- Test A for this FPS
         print(f"\n--- Test A @ {fps_val} FPS ---")
@@ -974,6 +981,8 @@ def main():
                 camera_fps_pass[serial][fps_val] = ok
 
         fps_results[fps_val] = fps_res
+    finally:
+        rclpy.shutdown()
 
     # 4. Combine results across FPS values.
     # A camera passes Test A if it passes at ANY tested FPS.
@@ -1020,11 +1029,6 @@ def main():
     if args.enable_ptp:
         print(f"\n[Test B] PTP cross-validation")
         print(f"  Threshold: {args.threshold_inter} ms")
-        # Gather all rounds from all FPS tests
-        all_rounds: List[Dict[str, CameraData]] = []
-        for fps_val in args.fps_list:
-            for res in fps_results.get(fps_val, []):
-                pass  # results only; need raw data
         # Re-use the last FPS's phase1_data for PTP
         # (PTP offset is FPS-independent)
         ptp_offsets = compute_ptp_offsets(phase1_data)
