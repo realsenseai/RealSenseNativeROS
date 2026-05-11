@@ -1,0 +1,25 @@
+# D555 Bringup — Default Parameters
+#
+# Override via launch arguments:
+#   ros2 launch d555_bringup d555_bringup.launch.py serial:=... cam_x:=0.30
+
+# Camera serial number (required — no default)
+# serial: "343122300393"
+
+# Camera namespace / TF prefix
+camera_name: "camera"
+
+# Mounting transform (base_link → camera_link)
+base_frame: "base_link"
+camera_frame: "camera_link"
+cam_x: 0.0
+cam_y: 0.0
+cam_z: 0.0
+cam_roll: 0.0
+cam_pitch: 0.0
+cam_yaw: 0.0
+
+# Feature toggles
+use_device_align: false
+enable_pointcloud: true
+enable_color_relay: true
