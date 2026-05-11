@@ -1,6 +1,6 @@
 # d555_bringup
 
-Host-side ROS 2 launch package for the **Intel RealSense D555** camera.
+Host-side ROS 2 launch package for the **RealSense D555** camera.
 
 The D555 camera boots autonomously and publishes ROS 2 topics over DDS/Ethernet.
 This package provides companion nodes that run on the host PC for TF broadcasting,
@@ -105,4 +105,16 @@ consumes the pre-aligned depth stream.
 
 ## License
 
-Apache-2.0 — see [LICENSE](../LICENSE).
+Copyright 2026 RealSense
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+> http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

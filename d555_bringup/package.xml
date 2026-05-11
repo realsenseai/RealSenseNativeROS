@@ -3,8 +3,8 @@
 <package format="3">
   <name>d555_bringup</name>
   <version>0.1.0</version>
-  <description>Host-side bringup launch file for Intel RealSense D555 camera</description>
-  <maintainer email="realsense@intel.com">Intel RealSense</maintainer>
+  <description>Host-side bringup launch file for RealSense D555 camera</description>
+  <maintainer email="realsense@realsenseai.com">RealSense</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
