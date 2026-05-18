@@ -51,6 +51,7 @@ def _make_pc_node(camera_name, depth_topic, camera_info_topic,
     else:
         remappings = [
             ('image_rect', depth_topic),
+            ('camera_info', camera_info_topic),
             ('points', f'/{camera_name}/points2'),
         ]
     return Node(
