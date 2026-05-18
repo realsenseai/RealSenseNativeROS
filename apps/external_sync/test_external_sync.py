@@ -912,75 +912,75 @@ def main():
 
     rclpy.init()
     try:
-      for fps_val in args.fps_list:
-        print(f"\n{'=' * 60}")
-        print(f"FPS = {fps_val}")
-        print(f"{'=' * 60}")
+        for fps_val in args.fps_list:
+            print(f"\n{'=' * 60}")
+            print(f"FPS = {fps_val}")
+            print(f"{'=' * 60}")
 
-        # Switch to target FPS + conditioning stop/start
-        set_fps(nodes, fps_val, restart_wait=args.restart_wait)
-        print("  Conditioning stop/start ...")
-        stop_start_streams(nodes, restart_wait=args.restart_wait)
+            # Switch to target FPS + conditioning stop/start
+            set_fps(nodes, fps_val, restart_wait=args.restart_wait)
+            print("  Conditioning stop/start ...")
+            stop_start_streams(nodes, restart_wait=args.restart_wait)
 
-        # Collect data
-        if ext_with_signal:
-            num_rounds = 1
-        elif multi_camera:
-            num_rounds = args.rounds
-        else:
-            num_rounds = 1
+            # Collect data
+            if ext_with_signal:
+                num_rounds = 1
+            elif multi_camera:
+                num_rounds = args.rounds
+            else:
+                num_rounds = 1
 
-        phase1_data: List[Dict[str, CameraData]] = []
-        for ri in range(num_rounds):
-            print(f"\n[Step 3] FPS={fps_val} -- Round {ri + 1}/"
-                  f"{num_rounds}: collecting {args.samples} frames ...")
+            phase1_data: List[Dict[str, CameraData]] = []
+            for ri in range(num_rounds):
+                print(f"\n[Step 3] FPS={fps_val} -- Round {ri + 1}/"
+                      f"{num_rounds}: collecting {args.samples} frames ...")
 
-            collector = FrameCollector(nodes, args.samples)
-            data = collector.collect(timeout_sec=args.collect_timeout)
-            collector.destroy_node()
+                collector = FrameCollector(nodes, args.samples)
+                data = collector.collect(timeout_sec=args.collect_timeout)
+                collector.destroy_node()
 
-            for serial, cam in sorted(data.items()):
-                print(f"  {serial}: depth_meta="
-                      f"{len(cam.depth_samples)} "
-                      f"color_meta={len(cam.color_samples)}")
+                for serial, cam in sorted(data.items()):
+                    print(f"  {serial}: depth_meta="
+                          f"{len(cam.depth_samples)} "
+                          f"color_meta={len(cam.color_samples)}")
 
-            phase1_data.append(data)
+                phase1_data.append(data)
 
-            if multi_camera and ri < num_rounds - 1:
-                print("\n  Stop/start streams (no hw_reset) ...")
-                stop_start_streams(nodes,
-                                   restart_wait=args.restart_wait)
+                if multi_camera and ri < num_rounds - 1:
+                    print("\n  Stop/start streams (no hw_reset) ...")
+                    stop_start_streams(nodes,
+                                       restart_wait=args.restart_wait)
 
-        # Analyze -- Test A for this FPS
-        print(f"\n--- Test A @ {fps_val} FPS ---")
-        print(f"  Threshold (std-dev / interval diff): "
-              f"{args.threshold_intra} ms")
-        if expect_no_sync:
-            print(f"  External sync (no signal): expect NOT synced "
-                  f"(|avg offset| > 5ms)")
-        elif args.enable_ext_sync:
-            print(f"  External sync (with signal): expect synced "
-                  f"(|avg offset| < 5ms)")
-        else:
-            print(f"  Internal sync mode: expect synced "
-                  f"(|avg offset| < 5ms)")
+            # Analyze -- Test A for this FPS
+            print(f"\n--- Test A @ {fps_val} FPS ---")
+            print(f"  Threshold (std-dev / interval diff): "
+                  f"{args.threshold_intra} ms")
+            if expect_no_sync:
+                print(f"  External sync (no signal): expect NOT synced "
+                      f"(|avg offset| > 5ms)")
+            elif args.enable_ext_sync:
+                print(f"  External sync (with signal): expect synced "
+                      f"(|avg offset| < 5ms)")
+            else:
+                print(f"  Internal sync mode: expect synced "
+                      f"(|avg offset| < 5ms)")
 
-        fps_res: List[SyncTestResult] = []
-        for ri, rd in enumerate(phase1_data):
-            if len(phase1_data) > 1:
-                print(f"  --- Round {ri + 1} ---")
-            for serial, cam in sorted(rd.items()):
-                ok, res = analyze_intra_camera(
-                    cam, args.threshold_intra,
-                    ext_sync=expect_no_sync,
-                    ext_sync_with_signal=ext_with_signal)
-                # Tag results with FPS
-                for r in res:
-                    r.fps = fps_val
-                fps_res.extend(res)
-                camera_fps_pass[serial][fps_val] = ok
+            fps_res: List[SyncTestResult] = []
+            for ri, rd in enumerate(phase1_data):
+                if len(phase1_data) > 1:
+                    print(f"  --- Round {ri + 1} ---")
+                for serial, cam in sorted(rd.items()):
+                    ok, res = analyze_intra_camera(
+                        cam, args.threshold_intra,
+                        ext_sync=expect_no_sync,
+                        ext_sync_with_signal=ext_with_signal)
+                    # Tag results with FPS
+                    for r in res:
+                        r.fps = fps_val
+                    fps_res.extend(res)
+                    camera_fps_pass[serial][fps_val] = ok
 
-        fps_results[fps_val] = fps_res
+            fps_results[fps_val] = fps_res
     finally:
         rclpy.shutdown()
 
