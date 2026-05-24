@@ -38,7 +38,7 @@ from launch_ros.actions import Node
 
 
 def _make_pc_node(camera_name, depth_topic, camera_info_topic,
-                  device_prefix, pc_type='xyzrgb'):
+                  pc_type='xyzrgb'):
     """Create a point_cloud node (xyzrgb or xyz)."""
     executable = f'point_cloud_{pc_type}_node'
     if pc_type == 'xyzrgb':
@@ -147,7 +147,7 @@ def _launch_setup(context):
             info_topic = f'{device_prefix}_Color/camera_info'
             nodes.append(_make_pc_node(
                 camera_name, depth_topic, info_topic,
-                device_prefix, pointcloud_type))
+                pointcloud_type))
     else:
         # Mode B: Device provides aligned depth
         if enable_pointcloud.lower() == 'true':
@@ -155,7 +155,7 @@ def _launch_setup(context):
                 camera_name,
                 f'{device_prefix}_Aligned_Depth_To_Color',
                 f'{device_prefix}_Aligned_Depth_To_Color/camera_info',
-                device_prefix, pointcloud_type))
+                pointcloud_type))
 
     return nodes
 

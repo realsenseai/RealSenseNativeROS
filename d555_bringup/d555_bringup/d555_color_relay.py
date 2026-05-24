@@ -24,7 +24,8 @@ as rgb8.
 Supported input encodings:
   - yuv422_yuy2 → rgb8
   - nv12        → rgb8
-  - rgb8/bgr8   → passthrough (no conversion)
+  - bgr8        → rgb8
+  - rgb8        → passthrough (no conversion)
 """
 
 import rclpy
