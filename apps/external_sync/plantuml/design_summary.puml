@@ -1,0 +1,29 @@
+@startuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+package "Test A: Intra-Camera" {
+    usecase "Verify |avg offset|\n(sync status)" as TA0
+    usecase "Verify offset\nstd-dev ≈ 0" as TA1
+    usecase "Verify frame\nintervals match" as TA2
+    usecase "Detect dropped\nframes" as TA3
+}
+
+package "Test B: PTP" {
+    usecase "Compute PTP offsets\ncamera→host" as TB1
+    usecase "PTP-corrected frame\nalignment" as TB2
+    usecase "Show wall-clock\ntimestamps" as TB3
+}
+
+note bottom of TA0
+  Internal: |avg| < 5ms → SYNCED
+  External: |avg| > 5ms → NOT SYNCED
+  (expected behavior)
+end note
+
+note bottom of TB1
+  Independent validation
+  using host wall-clock
+  as common reference.
+end note
+@enduml
