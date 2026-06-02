@@ -1,0 +1,45 @@
+# Copyright 2026 RealSense
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# D555 Bringup — Default Parameters (Reference Only)
+#
+# NOTE: This file is NOT loaded by the launch file. All defaults are defined
+# in DeclareLaunchArgument() in d555_bringup.launch.py. This file serves as
+# a reference for available parameters and their default values.
+#
+# Override via launch arguments:
+#   ros2 launch d555_bringup d555_bringup.launch.py serial:=... cam_x:=0.30
+
+# Camera serial number (required — no default)
+# serial: "343122300393"
+
+# Camera namespace / TF prefix
+camera_name: "camera"
+
+# Mounting transform (base_link → camera_link)
+base_frame: "base_link"
+camera_frame: "camera_link"
+cam_x: 0.0
+cam_y: 0.0
+cam_z: 0.0
+cam_roll: 0.0
+cam_pitch: 0.0
+cam_yaw: 0.0
+
+# Feature toggles
+use_device_align: false
+enable_pointcloud: true
+enable_depth_align: true
+enable_color_relay: true
+pointcloud_type: "xyzrgb"   # "xyzrgb" (colored) or "xyz" (depth only)
