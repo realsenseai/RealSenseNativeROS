@@ -65,7 +65,7 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 | **Camera Info** | ✅ Published | ✅ Published |
 | **TF / Extrinsics** | ✅ Published (`/tf`, `/tf_static`) | ✅ Published (`/tf_static`) |
 | **Metadata** | ✅ `realsense2_camera_msgs/msg/Metadata` | ✅ `std_msgs/msg/String` (JSON); pre-7.58 firmware also exposed legacy metadata |
-| **Point Cloud** | ✅ Host-generated | ⚠️ Native publisher is gated by `Depth.option.Enable_PointCloud`; keep `depth_image_proc` as the validated fallback |
+| **Point Cloud** | ✅ Host-generated | ✅ Native PointCloud2 publisher, gated by `Depth.option.Enable_PointCloud` |
 | **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble; Jazzy requires Cyclone DDS |
 
 <hr>
@@ -358,11 +358,12 @@ ros2 param set /D555_343122300393 Depth.option.Align_Depth 1
 ros2 topic echo /realsense/D555_343122300393_Aligned_Depth_To_Color \
   --once --no-arr --qos-reliability best_effort
 
-# Enable native PointCloud2 publisher
-ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 1
-ros2 topic info /realsense/D555_343122300393_Depth_Color_Points -v
-ros2 topic echo /realsense/D555_343122300393_Depth_Color_Points \
-  --once --no-arr --qos-reliability best_effort
+# Enable native PointCloud2 publisher.
+# Use 1 for XYZ or 2 for XYZRGB.
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 2
+python3 apps/show_ros_image.py \
+  --serial 343122300393 --stream PointCloud --duration 10
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
 
 # Enable object distance in ObjectDetection output.
 # Stop Depth/AlignedDepth subscribers first; Object Distance uses the
@@ -373,11 +374,13 @@ ros2 topic echo /realsense/D555_343122300393_ObjectDetection \
 ```
 
 On the tested D555 r58.3 firmware, aligned depth produced
-`sensor_msgs/msg/Image` samples. The PointCloud2 publisher appeared after
-`Depth.option.Enable_PointCloud`, but no PointCloud2 sample was received during a
-25-30 second echo window on one test setup. Keep host `depth_image_proc` as the
-validated fallback until native PointCloud2 samples are confirmed on your
-firmware/network combination.
+`sensor_msgs/msg/Image` samples and native PointCloud2 produced
+`sensor_msgs/msg/PointCloud2` samples with `x,y,z,rgb` fields. The
+`apps/show_ros_image.py --stream PointCloud` smoke test keeps hidden Depth and
+Color subscribers alive because the native XYZRGB PointCloud path is most stable
+when the Depth, Color, and PointCloud readers are active together. Avoid running
+multiple PointCloud readers, such as `ros2 topic hz` and `ros2 topic echo`, at
+the same time.
 
 ObjectDetection output is scene/model dependent. `ObjectDetection.option.Object_Distance=1`
 is accepted when the depth-cache pipeline is available, but returns
@@ -779,7 +782,7 @@ still report dropped samples.
 1. **Request Rate Limiting:** Limit service calls to approximately 1–2 per second, or add a 500 ms delay between burst requests. The SafeDDS ACK window is limited.
 2. **Batch Parameter Semantics:** Prefer `set_parameters_atomically` when multiple parameters must be applied together; plain `set_parameters` returns one result per parameter.
 3. **String Length Limits:** Parameter names and string values use fixed-size firmware buffers. `Device.Info` returns compact JSON from `ros2 param get`; use `ros2 param describe` or `get_device_info` for the full device description.
-4. **Native PointCloud2 Validation:** r58.3 exposes `/realsense/<SN>_Depth_Color_Points` after `Depth.option.Enable_PointCloud`, but on one tested D555 setup no PointCloud2 sample was received in a 25-30 second echo window. Use host `depth_image_proc` for production point cloud until native samples are confirmed.
+4. **Native PointCloud2 Usage:** r58.3 exposes `/realsense/<SN>_Depth_Color_Points` after `Depth.option.Enable_PointCloud=1` (XYZ) or `2` (XYZRGB). Use one long-lived PointCloud subscriber and keep Depth + Color readers active for the most stable XYZRGB path. `apps/show_ros_image.py --stream PointCloud` adds those hidden guard subscribers automatically.
 5. **ObjectDetection Output:** `/realsense/<SN>_ObjectDetection` may publish JSON with `number_of_detections: 0` in an empty scene. `ObjectDetection.option.Object_Distance=1` can return `Invalid value` if Depth or AlignedDepth streaming is already active; stop those subscribers before enabling the depth-cache distance path.
 6. **Pre-stream Filter Changes:** Apply decimation and improved close range depth settings before starting high-bandwidth stream tests when possible.
 7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.

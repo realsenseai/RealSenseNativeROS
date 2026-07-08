@@ -46,7 +46,7 @@ python3 show_ros_image.py --serial 343122300393 --stream AlignedDepth --duration
 ros2 param set /D555_343122300393 Depth.option.Align_Depth 0
 
 # Native PointCloud2 smoke test
-ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 1
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 2
 python3 show_ros_image.py --serial 343122300393 --stream PointCloud --duration 10
 ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
 
@@ -102,16 +102,18 @@ export ROS_DOMAIN_ID=2
 ### Pass/Fail Criteria (Headless)
 
 - **PASS:** Image streams require HW FPS >= 29.5 and at least one frame received.
-- **PointCloud2 PASS:** PointCloud2 smoke tests require at least one sample and HW FPS >= 0.1.
+- **PointCloud2 PASS:** PointCloud2 smoke tests require at least one sample and HW FPS >= 0.1. The app keeps hidden Depth + Color guard subscribers active for PointCloud streams.
 - **FAIL:** Otherwise. Log and pcap (if `--debug`) are preserved for analysis.
 - On PASS, log/pcap artifacts are auto-deleted.
 - If `ros2 topic hz <topic>` reports less than 29.5 FPS, the app will fail by design even when callbacks are received.
 
 On the tested D555 r58.3 firmware, `AlignedDepth` passed as
-`sensor_msgs/msg/Image`. The `Depth_Color_Points` publisher appeared after
-`Depth.option.Enable_PointCloud`, but no PointCloud2 sample was received during a
-25-30 second echo window, so the PointCloud smoke test may fail until firmware
-publishes samples. `ObjectDetection.option.Object_Distance=1` may return
+`sensor_msgs/msg/Image`, and `Depth_Color_Points` passed as
+`sensor_msgs/msg/PointCloud2` with `x,y,z,rgb` fields after
+`Depth.option.Enable_PointCloud=2`. The PointCloud smoke path uses one
+PointCloud reader plus hidden Depth + Color guard subscribers. Avoid running
+multiple PointCloud readers, such as `ros2 topic hz` plus `ros2 topic echo`, at
+the same time. `ObjectDetection.option.Object_Distance=1` may return
 `Invalid value` if depth streaming is already active; stop depth streaming before
 enabling the depth-cache distance path. The overlay still subscribes to
 `/realsense/<SN>_ObjectDetection` and draws detections when messages contain

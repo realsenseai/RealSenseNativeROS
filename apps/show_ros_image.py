@@ -35,8 +35,9 @@ Usage examples:
   python3 show_ros_image.py --gui --stream Depth+IR1+IR2
 
   # Native r58.3 PointCloud2 smoke test
-  ros2 param set /D555_344522301530 Depth.option.Enable_PointCloud 1
+  ros2 param set /D555_344522301530 Depth.option.Enable_PointCloud 2
   python3 show_ros_image.py --serial 344522301530 --stream Depth_Color_Points --duration 10
+  ros2 param set /D555_344522301530 Depth.option.Enable_PointCloud 0
 
 Stream aliases:
   IR1 / IR2 / IR3  →  Infrared_1/2/3
@@ -693,6 +694,38 @@ class Viewer(Node):
             st.latest = tile
 
 
+class PointCloudGuard(Node):
+    """Hidden Depth + Color subscribers used to keep the native PointCloud path active."""
+
+    def __init__(self, serial: str):
+        super().__init__(f"d555_pointcloud_guard_{serial}_{uuid.uuid4().hex[:6]}")
+        qos = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=5)
+        qos.reliability = ReliabilityPolicy.BEST_EFFORT
+        qos.durability = DurabilityPolicy.VOLATILE
+        base = f"/realsense/D555_{serial}"
+        self.counts = {"Depth": 0, "Color": 0}
+        self._subs = [
+            self.create_subscription(Image, f"{base}_Depth", self._depth_cb, qos),
+            self.create_subscription(Image, f"{base}_Color", self._color_cb, qos),
+        ]
+        self.get_logger().info(
+            f"[{base}_Depth, {base}_Color] hidden PointCloud guard subscribers")
+
+    def _depth_cb(self, _msg):
+        self.counts["Depth"] += 1
+
+    def _color_cb(self, _msg):
+        self.counts["Color"] += 1
+
+    def unsubscribe(self):
+        for sub in self._subs:
+            try:
+                self.destroy_subscription(sub)
+            except Exception:
+                pass
+        self._subs = []
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Object Detection overlay helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1123,7 +1156,24 @@ def main():
     n_streams = len(streams_info)
     states:      list[StreamState] = []
     nodes:       list[Viewer] = []
+    guard_nodes: list[PointCloudGuard] = []
     labels:      list[str] = []
+
+    # Native PointCloud2 is most reliable when Depth and Color readers stay
+    # active with the PointCloud reader. Keep these subscriptions hidden so a
+    # PointCloud smoke test does not need to render or score extra streams.
+    pointcloud_guard_serials = set()
+    for topic, label in streams_info:
+        if not is_pointcloud_stream(label, topic):
+            continue
+        _sn_match = re.search(r"D555_(\d+)", topic)
+        _sn = _sn_match.group(1) if _sn_match else serial
+        if _sn:
+            pointcloud_guard_serials.add(_sn)
+
+    for sn in sorted(pointcloud_guard_serials):
+        guard_nodes.append(PointCloudGuard(sn))
+        print(f"  → PointCloud guard: SN:{sn} Depth+Color hidden subscribers")
 
     for topic, label in streams_info:
         compressed = is_compressed_stream(label, topic)
@@ -1154,8 +1204,9 @@ def main():
     executors:    list = []
     spin_threads: list[threading.Thread] = []
     stop_events:  list[threading.Event] = []
+    all_nodes = guard_nodes + nodes
 
-    for node in nodes:
+    for node in all_nodes:
         exc = rclpy.executors.SingleThreadedExecutor()
         exc.add_node(node)
         ev = threading.Event()
@@ -1183,10 +1234,13 @@ def main():
         for i in range(n_streams):
             states[i].closed = True
             nodes[i].unsubscribe()
-            stop_events[i].set()
-        for i in range(n_streams):
-            spin_threads[i].join(timeout=1.0)
-        for nd in nodes:
+        for guard in guard_nodes:
+            guard.unsubscribe()
+        for ev in stop_events:
+            ev.set()
+        for th in spin_threads:
+            th.join(timeout=1.0)
+        for nd in all_nodes:
             try:
                 nd.destroy_node()
             except Exception:
