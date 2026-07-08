@@ -188,10 +188,11 @@ flowchart TD
 
 ## Prerequisites
 
-- **ROS 2 Humble** (or compatible)
+- **ROS 2 Humble**, or **ROS 2 Jazzy with Cyclone DDS**
 - Python 3 with `rclpy`, `sensor_msgs`, `std_msgs`
 - One or more D555e cameras visible on the ROS 2 domain
 - `ROS_DOMAIN_ID` set correctly (e.g., `export ROS_DOMAIN_ID=2`)
+- On Jazzy, `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 
 ## Usage
 
@@ -247,6 +248,14 @@ python3 tests/scripts/test_external_sync.py --enable-ext-sync --rounds 3
 # Multi-camera — external sync + PTP cross-validation
 python3 tests/scripts/test_external_sync.py --enable-ext-sync --rounds 3 \
     --enable-ptp
+```
+
+For Jazzy, select Cyclone DDS before running the same commands:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_DOMAIN_ID=2
 ```
 
 ## How It Works
@@ -719,14 +728,14 @@ ANALYSIS (sync_mode=External)
 
 | Symptom                                             | Possible Cause                               | Fix                                                                                                                                                                                                       |
 | --------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No D555e nodes found                                | Wrong `ROS_DOMAIN_ID`                        | `export ROS_DOMAIN_ID=2`, verify `ros2 node list`                                                                                                                                                         |
+| No D555e nodes found                                | Wrong `ROS_DOMAIN_ID` or wrong DDS middleware on Jazzy | `export ROS_DOMAIN_ID=2`; on Jazzy also `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`; verify `ros2 node list`                                                                                           |
 | No D555e nodes found                                | DDS discovery stale                          | Use `--min-cameras N` (auto-restarts daemon), or manually: `ros2 daemon stop && ros2 daemon start`                                                                                                        |
 | `ros2 node list` returns empty/partial              | Daemon cache stale after many CLI calls      | The tool auto-flushes every 20 calls.  Manually: `ros2 daemon stop && sleep 1 && ros2 daemon start`                                                                                                       |
 | No Depth/Color metadata                             | Image topic not subscribed                   | Ensure Image subscription active (tool does this automatically)                                                                                                                                           |
 | No Depth/Color metadata                             | Stream not active                            | Check camera is streaming: `ros2 topic hz /realsense/D555_{serial}_Depth`                                                                                                                                 |
-| No Color metadata for all cameras                   | Color streams dead after many mode switches  | Restart `realsense-viewer` (firmware issue — Color/CompressedColor stops publishing after repeated mode changes)                                                                                          |
+| No Color metadata for all cameras                   | Color streams dead after many mode switches  | Restart `realsense-viewer` (firmware issue — Color or Color/compressed stops publishing after repeated mode changes)                                                                                        |
 | No Color metadata for one camera                    | Camera Color stream intermittent             | The Color DDS stream on some cameras may be unreliable; retry the test                                                                                                                                    |
-| Test A SKIP: "No Color metadata"                    | CompRGB stream not publishing                | Check `ros2 topic hz /realsense/D555_{serial}_CompressedColor`.  Restart camera if needed.                                                                                                                |
+| Test A SKIP: "No Color metadata"                    | CompRGB stream not publishing                | Check `ros2 topic hz /realsense/D555_{serial}_Color/compressed`.  Restart camera if needed.                                                                                                               |
 | Test A FAIL after mode switch                       | Mode-switching transient                     | The firmware may need time to stabilize after switching between Internal/External.  Re-run the test without changing mode.                                                                                |
 | Test A FAIL: large offset in External (with signal) | Sync not working or software timestamp issue | Verify external trigger signal is connected and active.  Check firmware sensor timestamping logic.  A large offset (e.g. ~46ms) indicates the sensors are not firing simultaneously on the trigger pulse. |
 | Test A FAIL: NOT SYNCED in Internal mode            | Sync hardware issue                          | Check firmware, restart camera, verify Internal mode param                                                                                                                                                |

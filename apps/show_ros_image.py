@@ -34,14 +34,20 @@ Usage examples:
   # Multiple streams ('+' or ',' separated)
   python3 show_ros_image.py --gui --stream Depth+IR1+IR2
 
+  # Native r58.3 PointCloud2 smoke test
+  ros2 param set /D555_344522301530 Depth.option.Enable_PointCloud 1
+  python3 show_ros_image.py --serial 344522301530 --stream Depth_Color_Points --duration 10
+
 Stream aliases:
   IR1 / IR2 / IR3  →  Infrared_1/2/3
-  CompColor        →  CompressedColor
+  CompColor        →  Color/compressed
+  Points/PointCloud → Depth_Color_Points
+  AlignedDepth     →  Aligned_Depth_To_Color
 
 Output files (headless / debug):
   Log:   ros2-<SN>-<stream>-image-<YYYYMMDD_HHMMSS>.log
   Pcap:  ros2-<SN>-<stream>-image-<YYYYMMDD_HHMMSS>.pcap  (--debug only)
-  Files are auto-deleted on success (HW FPS ≥ 29.5 and frames received).
+  Files are auto-deleted on success (stream-specific FPS threshold and frames received).
 
 GUI window layout:
   ┌──────────────────────────────────────────────┐
@@ -69,7 +75,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 
-from sensor_msgs.msg import Image, CompressedImage
+from sensor_msgs.msg import Image, CompressedImage, PointCloud2
 from std_msgs.msg import String
 
 import cv2
@@ -98,6 +104,8 @@ def normalize_to_u8(x: np.ndarray) -> np.ndarray:
 
 
 def build_topic(serial: str, stream: str) -> str:
+    if stream == "CompressedColor":
+        return f"/realsense/D555_{serial}_Color/compressed"
     return f"/realsense/D555_{serial}_{stream}"
 
 
@@ -105,6 +113,13 @@ def is_compressed_stream(stream: str, topic: str) -> bool:
     s = (stream or "").lower()
     t = (topic or "").lower()
     return ("compressed" in s) or ("compressed" in t)
+
+
+def is_pointcloud_stream(stream: str, topic: str) -> bool:
+    s = (stream or "").lower()
+    t = (topic or "").lower()
+    return any(token in s or token in t for token in (
+        "pointcloud", "points", "depth_color_points"))
 
 
 def detect_serial() -> str:
@@ -367,6 +382,14 @@ _STREAM_ALIASES: dict[str, str] = {
     "infrared3":    "Infrared_3",
     "compcolor":    "CompressedColor",
     "compressedcolor": "CompressedColor",
+    "points":       "Depth_Color_Points",
+    "pointcloud":   "Depth_Color_Points",
+    "depthcolorpoints": "Depth_Color_Points",
+    "depth_color_points": "Depth_Color_Points",
+    "aligneddepth": "Aligned_Depth_To_Color",
+    "aligned_depth": "Aligned_Depth_To_Color",
+    "aligneddepthtocolor": "Aligned_Depth_To_Color",
+    "aligned_depth_to_color": "Aligned_Depth_To_Color",
     "color":        "Color",
     "depth":        "Depth",
     "motion":       "Motion",
@@ -426,17 +449,18 @@ _HW_FPS_OK_THRESHOLD = 29.5
 class StreamState:
     """Thread-safe state shared between ROS callback and the UI thread."""
 
-    __slots__ = ("lock", "latest", "count", "fmt", "meta",
+    __slots__ = ("lock", "latest", "count", "fmt", "meta", "min_fps",
                  "hw_fps", "_fps_buf", "first_cb_time", "last_cb_time",
                  "last_show", "dis_fps", "_dis_count", "_dis_t",
                  "closed", "od_detections", "od_count")
 
-    def __init__(self):
+    def __init__(self, min_fps: float = _HW_FPS_OK_THRESHOLD):
         self.lock = threading.Lock()
         self.latest = None
         self.count = 0          # total callbacks fired (HW frames received)
         self.fmt = ""
         self.meta = ""
+        self.min_fps = float(min_fps)
         self.hw_fps = 0.0
         self._fps_buf = collections.deque()   # timestamps of received frames
         # wall-clock time of first callback (None = never)
@@ -501,7 +525,8 @@ class StreamState:
 
 
 class Viewer(Node):
-    def __init__(self, topic: str, compressed: bool, node_name: str, state: StreamState,
+    def __init__(self, topic: str, compressed: bool, pointcloud: bool,
+                 node_name: str, state: StreamState, render_frames: bool = True,
                  od_topic: str = None):
         super().__init__(node_name)
         qos = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=5)
@@ -510,10 +535,15 @@ class Viewer(Node):
 
         self.bridge = CvBridge()
         self.state = state
+        self.render_frames = render_frames
         self._sub = None
         self._od_sub = None
 
-        if compressed:
+        if pointcloud:
+            self._sub = self.create_subscription(
+                PointCloud2, topic, self._cb_pointcloud, qos)
+            self.get_logger().info(f"[{topic}] PointCloud2 BEST_EFFORT")
+        elif compressed:
             self._sub = self.create_subscription(
                 CompressedImage, topic, self._cb_compressed, qos)
             self.get_logger().info(f"[{topic}] CompressedImage BEST_EFFORT")
@@ -573,18 +603,27 @@ class Viewer(Node):
         st = self.state
         if st.closed:          # ← stop processing after window closed
             return
-        raw = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
         enc = (msg.encoding or "").lower()
-        disp = self._decode(raw, enc, self.bridge, msg)
         with st.lock:
             st.record_hw_frame()
-            st.latest = disp
             st.fmt = enc
             st.meta = f"enc={msg.encoding} {msg.width}x{msg.height}"
+        if not self.render_frames:
+            return
+        raw = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        disp = self._decode(raw, enc, self.bridge, msg)
+        with st.lock:
+            st.latest = disp
 
     def _cb_compressed(self, msg: CompressedImage):
         st = self.state
         if st.closed:          # ← stop processing after window closed
+            return
+        with st.lock:
+            st.record_hw_frame()
+            st.fmt = msg.format
+            st.meta = f"format={msg.format} bytes={len(msg.data)}"
+        if not self.render_frames:
             return
         buf = np.frombuffer(msg.data, dtype=np.uint8)
         img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
@@ -593,9 +632,7 @@ class Viewer(Node):
                 f"imdecode failed: format='{msg.format}' bytes={len(msg.data)}")
             return
         with st.lock:
-            st.record_hw_frame()
             st.latest = img
-            st.fmt = msg.format
             st.meta = f"format={msg.format} {img.shape[1]}x{img.shape[0]}"
 
     def _cb_od(self, msg: String):
@@ -611,6 +648,49 @@ class Viewer(Node):
         with st.lock:
             st.od_detections = data.get("detections", [])
             st.od_count += 1
+
+    @staticmethod
+    def _render_pointcloud_summary(msg: PointCloud2) -> np.ndarray:
+        """Render a lightweight status tile for PointCloud2 smoke tests."""
+        w, h = 800, 480
+        tile = np.full((h, w, 3), (32, 38, 44), dtype=np.uint8)
+        fields = ", ".join(f"{f.name}:{f.offset}" for f in msg.fields[:8])
+        if len(msg.fields) > 8:
+            fields += ", ..."
+        lines = [
+            "PointCloud2",
+            f"size: {msg.width} x {msg.height}",
+            f"point_step: {msg.point_step}  row_step: {msg.row_step}",
+            f"points: {msg.width * msg.height}",
+            f"data bytes: {len(msg.data)}",
+            f"dense: {msg.is_dense}",
+            f"fields: {fields or '(none)'}",
+        ]
+        y = 56
+        cv2.putText(tile, lines[0], (28, y), _FONT, 1.0,
+                    (0, 220, 255), 2, cv2.LINE_AA)
+        y += 54
+        for line in lines[1:]:
+            cv2.putText(tile, line, (28, y), _FONT, 0.55,
+                        (230, 235, 240), 1, cv2.LINE_AA)
+            y += 38
+        return tile
+
+    def _cb_pointcloud(self, msg: PointCloud2):
+        st = self.state
+        if st.closed:
+            return
+        fields = ",".join(f.name for f in msg.fields)
+        with st.lock:
+            st.record_hw_frame()
+            st.fmt = "PointCloud2"
+            st.meta = (f"{msg.width}x{msg.height} step={msg.point_step} "
+                       f"fields={fields}")
+        if not self.render_frames:
+            return
+        tile = self._render_pointcloud_summary(msg)
+        with st.lock:
+            st.latest = tile
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -788,13 +868,13 @@ def build_combined_frame(
         # Determine stream health status:
         #   NO_CB   – callback has never fired (likely DDS discovery not matched)
         #   STALE   – callback fired before but not in last 2s (stream interrupted)
-        #   LOW_FPS – receiving frames but HW FPS < 29.5 (degraded)
-        #   LIVE    – actively receiving AND HW FPS ≥ 29.5
+        #   LOW_FPS – receiving frames but HW FPS < stream threshold (degraded)
+        #   LIVE    – actively receiving AND HW FPS >= stream threshold
         if first_cb is None:
             stream_status = "NO_CB"
         elif (now - last_cb) > _HW_FPS_WINDOW:
             stream_status = "STALE"
-        elif hw_fps < _HW_FPS_OK_THRESHOLD:
+        elif hw_fps < st.min_fps:
             stream_status = "LOW_FPS"
         else:
             stream_status = "LIVE"
@@ -870,7 +950,8 @@ def main():
         default="Depth",
         help=("Stream name(s), '+' or ',' separated.  Aliases: "
               "IR1=Infrared_1, IR2=Infrared_2, IR3=Infrared_3, "
-              "CompColor=CompressedColor.  e.g. Depth+IR1+IR2"),
+              "CompColor=Color/compressed, Points=Depth_Color_Points, "
+              "AlignedDepth=Aligned_Depth_To_Color.  e.g. Depth+IR1+IR2"),
     )
     ap.add_argument(
         "--topic", help="Single full topic path (overrides --serial/--stream)")
@@ -890,7 +971,7 @@ def main():
                     help=f"Height of each stream sub-figure (default {_SUB_H})")
     ap.add_argument("--od", action="store_true",
                     help="Enable object detection overlay.  Subscribes to the dedicated "
-                         "OD topic and draws bounding boxes on Color/CompressedColor streams.")
+                         "OD topic and draws bounding boxes on Color or Color/compressed streams.")
     args = ap.parse_args()
 
     if args.domain_id is not None:
@@ -1046,22 +1127,27 @@ def main():
 
     for topic, label in streams_info:
         compressed = is_compressed_stream(label, topic)
+        pointcloud = is_pointcloud_stream(label, topic)
         node_name = sanitize(f"d555_viewer_{label}_{uuid.uuid4().hex[:6]}")
-        st = StreamState()
-        # Determine OD topic for this stream (--od flag, Color/CompressedColor only)
+        min_fps = 0.1 if pointcloud else _HW_FPS_OK_THRESHOLD
+        st = StreamState(min_fps=min_fps)
+        # Determine OD topic for this stream (--od flag, Color or Color/compressed only)
         od_topic = None
         if args.od:
             _base = label.split("_")[-1] if "_" in label else label
-            if _base.lower() in ("color", "compressedcolor"):
+            _base_key = _base.lower().replace("/", "")
+            if _base_key in ("color", "compressedcolor", "colorcompressed"):
                 # Infer serial from the image topic path
                 _sn_match = re.search(r"D555_(\d+)", topic)
                 _sn = _sn_match.group(1) if _sn_match else serial
                 od_topic = f"/realsense/D555_{_sn}_ObjectDetection"
-        node = Viewer(topic, compressed, node_name, st, od_topic=od_topic)
+        node = Viewer(topic, compressed, pointcloud, node_name, st,
+                      render_frames=gui_mode, od_topic=od_topic)
         states.append(st)
         nodes.append(node)
         labels.append(label)
         print(f"  → Stream:{label}  topic={topic}  compressed={compressed}"
+              f"  pointcloud={pointcloud}  min_fps={min_fps:.1f}"
               f"{'  od=' + od_topic if od_topic else ''}")
 
     # ── one executor + spin thread per stream ─────────────────────────────────
@@ -1224,7 +1310,7 @@ def main():
                         tag = "NO_CB"
                     elif (now - lcb) > _HW_FPS_WINDOW:
                         tag = "STALE"
-                    elif hw < _HW_FPS_OK_THRESHOLD:
+                    elif hw < st.min_fps:
                         tag = "LOW_FPS"
                     else:
                         tag = "LIVE"
@@ -1255,10 +1341,10 @@ def main():
         # ── evaluate pass/fail ────────────────────────────────────────────────
         all_ok = True
         for i, st in enumerate(states):
-            ok = (st.count > 0 and st.hw_fps >= _HW_FPS_OK_THRESHOLD)
+            ok = (st.count > 0 and st.hw_fps >= st.min_fps)
             status = "PASS" if ok else "FAIL"
             _log(f"  RESULT  {labels[i]:16s}  {status}  "
-                 f"HW:{st.hw_fps:.1f}fps  cnt:{st.count}")
+                 f"HW:{st.hw_fps:.1f}fps  min:{st.min_fps:.1f}fps  cnt:{st.count}")
             if not ok:
                 all_ok = False
                 exit_code = 1

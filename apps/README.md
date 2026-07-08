@@ -2,9 +2,10 @@
 
 Sample applications for the Intel RealSense D555 camera's native ROS2 interface.
 
-> **Prerequisites:** ROS2 Humble, Python 3.10+, OpenCV (`pip3 install opencv-python`).
+> **Prerequisites:** ROS2 Humble, or ROS2 Jazzy with Cyclone DDS, Python 3.10+, OpenCV (`pip3 install opencv-python`).
 > The D555 must be connected via Ethernet on the same subnet (default IP: `192.168.11.55`).
 > Set `ROS_DOMAIN_ID` to match the device (e.g., `export ROS_DOMAIN_ID=2`).
+> On Jazzy, also set `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`.
 
 ---
 
@@ -15,12 +16,12 @@ Designed for both interactive viewing and automated CI/regression testing.
 
 ### Features
 
-- **Multi-stream tiling:** View Depth, Color, IR1, IR2, CompressedColor simultaneously.
+- **Multi-stream tiling:** View Depth, Color, IR1, IR2, Color/compressed, aligned depth, and PointCloud2 smoke-test streams.
 - **Multi-camera:** Comma-separated serials for single-process multi-camera viewing.
 - **HW FPS measurement:** Sliding-window (2 s) real-time frame rate, independent of display rendering.
 - **Headless CI mode (default):** Prints status to stdout, writes a log file, auto-cleans on PASS.
 - **Pre-stream network check:** Validates device/host MTU match before subscribing.
-- **Object detection overlay:** `--od` flag draws bounding boxes from the OD topic.
+- **Object detection overlay:** `--od` flag draws bounding boxes and distance values from the OD topic when ObjectDetection publishes output.
 - **Debug pcap capture:** `--debug` starts a tshark capture for offline DDS analysis.
 
 ### Usage
@@ -39,6 +40,20 @@ python3 show_ros_image.py --gui --serial 343122300393 --stream Depth+Color+IR1
 # Headless mode (default) — automated test, 30 s timeout
 python3 show_ros_image.py --serial 343122300393 --stream Depth --duration 30
 
+# On-device aligned depth (enable the firmware topic first)
+ros2 param set /D555_343122300393 Depth.option.Align_Depth 1
+python3 show_ros_image.py --serial 343122300393 --stream AlignedDepth --duration 10
+ros2 param set /D555_343122300393 Depth.option.Align_Depth 0
+
+# Native PointCloud2 smoke test
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 1
+python3 show_ros_image.py --serial 343122300393 --stream PointCloud --duration 10
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
+
+# ObjectDetection overlay on color; detections and distance fields are scene/model dependent
+ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
+python3 show_ros_image.py --gui --serial 343122300393 --stream Color --od
+
 # Auto-detect serial
 python3 show_ros_image.py --gui --stream Color
 
@@ -47,6 +62,14 @@ python3 show_ros_image.py --gui --serial 343122300393,344522301530 --stream Dept
 
 # Debug mode with pcap capture
 python3 show_ros_image.py --debug --serial 343122300393 --stream Color --duration 30
+```
+
+For Jazzy, use Cyclone DDS in the shell before running the same commands:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_DOMAIN_ID=2
 ```
 
 <details>
@@ -58,7 +81,9 @@ python3 show_ros_image.py --debug --serial 343122300393 --stream Color --duratio
 |-------|---------------|
 | `IR1` | `Infrared_1` |
 | `IR2` | `Infrared_2` |
-| `CompColor` | `CompressedColor` |
+| `CompColor` | `/realsense/<SN>_Color/compressed` |
+| `AlignedDepth` | `Aligned_Depth_To_Color` |
+| `Points`, `PointCloud` | `Depth_Color_Points` |
 
 ### Command-Line Options
 
@@ -76,9 +101,21 @@ python3 show_ros_image.py --debug --serial 343122300393 --stream Color --duratio
 
 ### Pass/Fail Criteria (Headless)
 
-- **PASS:** HW FPS ≥ 29.5 and at least one frame received.
+- **PASS:** Image streams require HW FPS >= 29.5 and at least one frame received.
+- **PointCloud2 PASS:** PointCloud2 smoke tests require at least one sample and HW FPS >= 0.1.
 - **FAIL:** Otherwise. Log and pcap (if `--debug`) are preserved for analysis.
 - On PASS, log/pcap artifacts are auto-deleted.
+- If `ros2 topic hz <topic>` reports less than 29.5 FPS, the app will fail by design even when callbacks are received.
+
+On the tested D555 r58.3 firmware, `AlignedDepth` passed as
+`sensor_msgs/msg/Image`. The `Depth_Color_Points` publisher appeared after
+`Depth.option.Enable_PointCloud`, but no PointCloud2 sample was received during a
+25-30 second echo window, so the PointCloud smoke test may fail until firmware
+publishes samples. `ObjectDetection.option.Object_Distance=1` may return
+`Invalid value` if depth streaming is already active; stop depth streaming before
+enabling the depth-cache distance path. The overlay still subscribes to
+`/realsense/<SN>_ObjectDetection` and draws detections when messages contain
+detection boxes.
 
 ### GUI Layout
 
@@ -99,7 +136,7 @@ Exit: `q` or close window (GUI), `Ctrl-C` or `--duration` timeout (headless).
 
 | Package | Install |
 |---------|---------|
-| `rclpy` | Included with ROS2 Humble |
+| `rclpy` | Included with ROS2 Humble/Jazzy |
 | `opencv-python` | `pip3 install opencv-python` |
 | `cv_bridge` | `sudo apt install ros-humble-cv-bridge` |
 | `numpy` | `pip3 install numpy` |
@@ -113,6 +150,10 @@ Exit: `q` or close window (GUI), `Ctrl-C` or `--duration` timeout (headless).
 
 An interactive 3D point cloud reconstruction application with real-time rotating views,
 metadata display, and PLY export.
+
+This application reconstructs point clouds on the host from raw Depth + Color
+topics. It does not depend on the native `/realsense/<SN>_Depth_Color_Points`
+PointCloud2 publisher.
 
 ### Features
 
@@ -176,7 +217,7 @@ python3 d555_3d_reconstruction_v4.py
 
 | Package | Install |
 |---------|---------|
-| `rclpy` | Included with ROS2 Humble |
+| `rclpy` | Included with ROS2 Humble/Jazzy |
 | `opencv-python` | `pip3 install opencv-python` |
 | `numpy` | `pip3 install numpy` |
 | `open3d` (optional, for PLY export) | `pip3 install open3d` |

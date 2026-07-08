@@ -12,6 +12,7 @@
 <hr>
 
 [![humble](https://img.shields.io/badge/-HUMBLE-orange?style=flat-square&logo=ros)](https://docs.ros.org/en/humble/index.html)
+[![jazzy](https://img.shields.io/badge/-JAZZY-orange?style=flat-square&logo=ros)](https://docs.ros.org/en/jazzy/index.html)
 [![ubuntu22](https://img.shields.io/badge/-UBUNTU%2022.04-blue?style=flat-square&logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/jammy/)
 [![ubuntu24](https://img.shields.io/badge/-UBUNTU%2024.04-blue?style=flat-square&logo=ubuntu&logoColor=white)](https://releases.ubuntu.com/noble/)
 
@@ -25,7 +26,7 @@
     * Device Discovery
     * Camera Name and Namespace
     * Parameters
-    * ROS2/Robot vs Optical/Camera Coordination Systems
+    * ROS2/Robot vs Optical/Camera Coordinate Systems
     * TF from coordinate A to coordinate B
     * Extrinsics from sensor A to sensor B
     * Published Topics
@@ -60,12 +61,12 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 | **Launch mechanism** | `ros2 launch realsense2_camera rs_launch.py` | Automatic on device power-on |
 | **Parameter syntax** | `depth_module.emitter_enabled` | `Depth.option.Emitter_Enabled` |
 | **Topic namespace** | `/camera/camera/<stream>/...` | `/realsense/<DeviceModel>_<Serial>_<Stream>/...` |
-| **Image streams** | Depth, Color, IR1, IR2, IMU | Depth, Color, IR1, IR2, CompressedColor, IMU |
+| **Image streams** | Depth, Color, IR1, IR2, IMU | Depth, Color, IR1, IR2, Color/compressed, IMU, ObjectDetection; aligned depth is parameter-gated |
 | **Camera Info** | ✅ Published | ✅ Published |
 | **TF / Extrinsics** | ✅ Published (`/tf`, `/tf_static`) | ✅ Published (`/tf_static`) |
-| **Metadata** | ✅ `realsense2_camera_msgs/msg/Metadata` | ✅ `std_msgs/msg/String` (JSON) + `realsense2_camera_msgs/msg/Metadata` (legacy) |
-| **Point Cloud** | ✅ Host-generated | ❌ Not yet (use `depth_image_proc` on host) |
-| **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble |
+| **Metadata** | ✅ `realsense2_camera_msgs/msg/Metadata` | ✅ `std_msgs/msg/String` (JSON); pre-7.58 firmware also exposed legacy metadata |
+| **Point Cloud** | ✅ Host-generated | ⚠️ Native publisher is gated by `Depth.option.Enable_PointCloud`; keep `depth_image_proc` as the validated fallback |
+| **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble; Jazzy requires Cyclone DDS |
 
 <hr>
 
@@ -74,7 +75,8 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 ### Prerequisites
 - **Network:** The D555 device must be on the same network subnet as the host PC (e.g., `192.168.11.x/24`, subnet mask `255.255.255.0`).
 - **Multicast:** The network must support UDP multicast for DDS discovery.
-- **ROS2 Distribution:** Humble.
+- **ROS2 Distribution:** Humble or Jazzy.
+- **DDS Middleware:** Jazzy must use Cyclone DDS (`rmw_cyclonedds_cpp`).
 - **MTU:** 9000 (this is the factory default and can be changed via device configuration). Jumbo frames are required on both host and device.
 
 ### Step 1: Install a ROS2 Distribution
@@ -82,7 +84,22 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 Follow the official installation guide for your platform:
 
 - **Ubuntu 22.04:** ROS2 Humble installation guide at `https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html`
-- **Ubuntu 24.04:** ROS2 Humble is not natively packaged for Ubuntu 24.04. Use a Docker container with Ubuntu 22.04 and ROS2 Humble installed.
+- **Ubuntu 24.04:** ROS2 Jazzy installation guide at `https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debians.html`
+
+For Jazzy hosts, install and select Cyclone DDS before using the D555 native ROS
+interface:
+
+```bash
+sudo apt install ros-jazzy-rmw-cyclonedds-cpp
+source /opt/ros/jazzy/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+```
+
+For Humble hosts:
+
+```bash
+source /opt/ros/humble/setup.bash
+```
 
 ### Step 1.5: Update Device Firmware
 
@@ -100,6 +117,10 @@ For the best experience, ensure your D555 is running the latest firmware:
    ```bash
    export ROS_DOMAIN_ID=0
    ```
+4. On Jazzy, keep Cyclone DDS selected in every shell that runs ROS commands:
+   ```bash
+   export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+   ```
 
 ### Step 3: Verify Device Discovery
 
@@ -114,6 +135,10 @@ ros2 node list
 > **Note:** Unlike `realsense-ros`, there is no `ros2 launch` or `ros2 run` command to start the camera node. The node starts automatically when the device boots.
 
 > **DDS Discovery:** If the device does not appear immediately, allow up to 30 seconds for DDS discovery to complete. In some network configurations, you may need to increase the DDS discovery timeout. Refer to your DDS middleware documentation (e.g., FastDDS, CycloneDDS) for details on configuring discovery-related timeouts.
+
+> **Jazzy Note:** The D555 native ROS interface requires Cyclone DDS on Jazzy.
+> If `ros2 node list` does not discover the camera on Jazzy, verify
+> `echo $RMW_IMPLEMENTATION` prints `rmw_cyclonedds_cpp`.
 
 <hr>
 
@@ -157,8 +182,8 @@ The D555 firmware automatically names its ROS2 node and topics based on the devi
 > ros2 topic list
 /realsense/D555_343122300393_Color
 /realsense/D555_343122300393_Color/camera_info
+/realsense/D555_343122300393_Color/compressed
 /realsense/D555_343122300393_Color/metadata
-/realsense/D555_343122300393_CompressedColor
 /realsense/D555_343122300393_Depth
 /realsense/D555_343122300393_Depth/camera_info
 /realsense/D555_343122300393_Depth/metadata
@@ -170,10 +195,12 @@ The D555 firmware automatically names its ROS2 node and topics based on the devi
 /realsense/D555_343122300393_Infrared_2/metadata
 /realsense/D555_343122300393_Motion
 /realsense/D555_343122300393_Motion/metadata
+/realsense/D555_343122300393_ObjectDetection
 /realsense/D555_343122300393/tf_static
 
 > ros2 service list | grep D555
 /D555_343122300393/describe_parameters
+/D555_343122300393/get_device_info
 /D555_343122300393/get_device_info_std
 /D555_343122300393/get_parameter_types
 /D555_343122300393/get_parameters
@@ -202,15 +229,19 @@ The D555 firmware automatically names its ROS2 node and topics based on the devi
 
 #### Parameter Naming Convention
 
-Parameters follow the format: `<Sensor>.<Group>.<Name>`
+Most parameters follow the format: `<Sensor>.<Group>.<Name>`. Depth filters use
+`Depth.filter.<FilterName>.<OptionName>`.
 
 | Component | Values | Description |
 |:----------|:-------|:------------|
 | **Sensor** | `Depth`, `RGB`, `Motion` | Target sensor module |
-| **Group** | `option`, `Profile` | `option` for controls, `Profile` for stream configuration |
-| **Name** | e.g., `Gain`, `Exposure`, `Emitter_Enabled` | Specific control name |
+| **Group** | `option`, `Profile`, `filter` | `option` for controls, `Profile` for stream configuration, `filter` for depth filters |
+| **Name** | e.g., `Gain`, `Exposure`, `Emitter_Enabled`, `Temporal.Toggle` | Specific control name |
 
-> **Compatibility Note:** The system accepts ONLY dot (`.`) and underscore (`_`) as the group separator. For example, `Depth.option.Gain` and `Depth.option_Gain` are both valid.
+> **Compatibility Note:** Use the exact names reported by `ros2 param list`.
+> On r58.3, underscore-separated group names such as `Depth.option_Gain` are
+> invalid and are expected to return `Parameter not set.` Use
+> `Depth.option.Gain` only if it appears in `ros2 param list`.
 
 #### Mapping from realsense-ros Parameters
 
@@ -222,6 +253,9 @@ Parameters follow the format: `<Sensor>.<Group>.<Name>`
 | `depth_module.enable_auto_exposure` | `Depth.option.Enable_Auto_Exposure` | Auto exposure on/off |
 | `depth_module.laser_power` | `Depth.option.Laser_Power` | Laser power [0–360] |
 | `depth_module.depth_profile` | `Depth.Profile` | Stream profile (e.g., `"z16, 896, 504, 30"`) |
+| `align_depth.enable` | `Depth.option.Align_Depth` | Enable on-device depth-to-color alignment topic |
+| `pointcloud.enable` | `Depth.option.Enable_PointCloud` | Enable on-device PointCloud2 publisher |
+| `spatial_filter.*`, `temporal_filter.*`, `decimation_filter.*` | `Depth.filter.*` | On-device depth filters |
 | `rgb_camera.color_profile` | `RGB.Profile` | RGB profile (e.g., `"yuv, 896, 504, 30"`) |
 | `rgb_camera.gain` | `RGB.option.Gain` | RGB sensor gain |
 | `rgb_camera.exposure` | `RGB.option.Exposure` | RGB sensor exposure (μs) |
@@ -242,7 +276,28 @@ Parameters follow the format: `<Sensor>.<Group>.<Name>`
 | `Depth.option.Emitter_Enabled` | Integer | 0–1 | 1 | Laser emitter on/off |
 | `Depth.option.Laser_Power` | Integer | 0–360 | 150 | Laser power level |
 | `Depth.option.Enable_Auto_Exposure` | Integer | 0–1 | 1 | Auto-exposure on/off |
+| `Depth.option.Align_Depth` | Integer | 0–1 | 0 | Publish `/realsense/<SN>_Aligned_Depth_To_Color` |
+| `Depth.option.Enable_PointCloud` | Integer | 0–2 | 0 | Publish `/realsense/<SN>_Depth_Color_Points` (`1` = XYZ, `2` = XYZRGB) |
 | `Depth.Profile` | String | — | `"z16, 896, 504, 30"` | Profile: `<format>, <W>, <H>, <FPS>` |
+
+#### Depth Filter Parameters
+
+| Parameter | Type | Description |
+|:----------|:-----|:------------|
+| `Depth.filter.Temporal.Toggle` | Integer | Enable/disable temporal filtering |
+| `Depth.filter.Temporal.Alpha` | Double | Temporal filter alpha |
+| `Depth.filter.Temporal.Delta` | Integer | Temporal filter delta |
+| `Depth.filter.Temporal.Persistency` | Integer | Temporal persistency mode |
+| `Depth.filter.Decimation.Toggle` | Integer | Enable/disable decimation filtering |
+| `Depth.filter.Decimation.Magnitude` | Integer | Decimation magnitude |
+| `Depth.filter.Improved_Close_Range_Depth.Enable` | Integer | Enable/disable improved close range depth |
+
+#### Object Detection Parameters
+
+| Parameter | Type | Description |
+|:----------|:-----|:------------|
+| `ObjectDetection.Profile` | Integer | Read-only object detection FPS profile; tested value: `30` |
+| `ObjectDetection.option.Object_Distance` | Integer | Include per-detection distance when the setting is accepted and ObjectDetection publishes output |
 
 #### RGB Sensor Parameters
 
@@ -289,9 +344,49 @@ ros2 param set /D555_343122300393 Depth.option.Exposure 5000
 ros2 param get /D555_343122300393 Depth.option.Exposure
 ```
 
+#### Example: Enabling r58.3 Features
+
+Keep parameter/service commands rate-limited to about 1-2 calls per second.
+
+```bash
+# Enable temporal filtering and verify the setting
+ros2 param set /D555_343122300393 Depth.filter.Temporal.Toggle 1
+ros2 param get /D555_343122300393 Depth.filter.Temporal.Toggle
+
+# Enable on-device aligned depth
+ros2 param set /D555_343122300393 Depth.option.Align_Depth 1
+ros2 topic echo /realsense/D555_343122300393_Aligned_Depth_To_Color \
+  --once --no-arr --qos-reliability best_effort
+
+# Enable native PointCloud2 publisher
+ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 1
+ros2 topic info /realsense/D555_343122300393_Depth_Color_Points -v
+ros2 topic echo /realsense/D555_343122300393_Depth_Color_Points \
+  --once --no-arr --qos-reliability best_effort
+
+# Enable object distance in ObjectDetection output.
+# Stop Depth/AlignedDepth subscribers first; Object Distance uses the
+# depth-cache pipeline and is rejected while normal depth streaming is active.
+ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
+ros2 topic echo /realsense/D555_343122300393_ObjectDetection \
+  --once --qos-reliability best_effort
+```
+
+On the tested D555 r58.3 firmware, aligned depth produced
+`sensor_msgs/msg/Image` samples. The PointCloud2 publisher appeared after
+`Depth.option.Enable_PointCloud`, but no PointCloud2 sample was received during a
+25-30 second echo window on one test setup. Keep host `depth_image_proc` as the
+validated fallback until native PointCloud2 samples are confirmed on your
+firmware/network combination.
+
+ObjectDetection output is scene/model dependent. `ObjectDetection.option.Object_Distance=1`
+is accepted when the depth-cache pipeline is available, but returns
+`Invalid value` if normal depth streaming is already active. Stop Depth and
+AlignedDepth subscribers before enabling Object Distance.
+
 <hr>
 
-### ROS2/Robot vs Optical/Camera Coordination Systems
+### ROS2/Robot vs Optical/Camera Coordinate Systems
 
 - **Point of View:** Imagine standing behind the camera, looking forward.
 - **ROS2 Coordinate System:** (X: Forward, Y: Left, Z: Up)
@@ -347,16 +442,24 @@ The published topics differ based on the device configuration and active streams
 |:------|:-----|:----|:------------|
 | `/realsense/<SN>_Depth` | `sensor_msgs/msg/Image` | Best Effort | 16-bit depth map |
 | `/realsense/<SN>_Color` | `sensor_msgs/msg/Image` | Best Effort | RGB color image |
+| `/realsense/<SN>_Color/compressed` | `sensor_msgs/msg/CompressedImage` | Best Effort | JPEG-compressed color |
 | `/realsense/<SN>_Infrared_1` | `sensor_msgs/msg/Image` | Best Effort | Left IR image |
 | `/realsense/<SN>_Infrared_2` | `sensor_msgs/msg/Image` | Best Effort | Right IR image |
-| `/realsense/<SN>_CompressedColor` | `sensor_msgs/msg/CompressedImage` | Best Effort | JPEG-compressed color |
 | `/realsense/<SN>_Motion` | `sensor_msgs/msg/Imu` | Best Effort | IMU (gyro + accel) data |
+| `/realsense/<SN>_ObjectDetection` | `std_msgs/msg/String` | Best Effort | Object detection JSON output |
 | `/realsense/<SN>_<Stream>/camera_info` | `sensor_msgs/msg/CameraInfo` | Best Effort | Camera intrinsics & calibration |
 | `/realsense/<SN>_<Stream>/metadata` | `std_msgs/msg/String` | Best Effort | Per-frame metadata (JSON) |
-| `/realsense/<SN>_<Stream>/metadata_legacy` | `realsense2_camera_msgs/msg/Metadata` | Best Effort | D4xx-compatible metadata (Header + JSON) |
 | `/realsense/<SN>/tf_static` | `tf2_msgs/msg/TFMessage` | Reliable, Transient Local | Static coordinate transforms |
 
 Where `<SN>` = `D555_<SerialNumber>` (e.g., `D555_343122300393`).
+
+Additional r58.3 topics appear only after enabling their parameters:
+
+| Topic | Type | Enable Parameter |
+|:------|:-----|:-----------------|
+| `/realsense/<SN>_Aligned_Depth_To_Color` | `sensor_msgs/msg/Image` | `Depth.option.Align_Depth=1` |
+| `/realsense/<SN>_Aligned_Depth_To_Color/camera_info` | `sensor_msgs/msg/CameraInfo` | `Depth.option.Align_Depth=1` |
+| `/realsense/<SN>_Depth_Color_Points` | `sensor_msgs/msg/PointCloud2` | `Depth.option.Enable_PointCloud=1` or `2` |
 
 **Mapping to realsense-ros topics:**
 
@@ -364,12 +467,15 @@ Where `<SN>` = `D555_<SerialNumber>` (e.g., `D555_343122300393`).
 | :--- | :--- | :--- |
 | `/camera/camera/depth/image_rect_raw` | `/realsense/D555_<Serial>_Depth` | `sensor_msgs/msg/Image` |
 | `/camera/camera/color/image_raw` | `/realsense/D555_<Serial>_Color` | `sensor_msgs/msg/Image` |
+| `/camera/camera/color/image_raw/compressed` | `/realsense/D555_<Serial>_Color/compressed` | `sensor_msgs/msg/CompressedImage` |
 | `/camera/camera/infra1/image_rect_raw` | `/realsense/D555_<Serial>_Infrared_1` | `sensor_msgs/msg/Image` |
 | `/camera/camera/infra2/image_rect_raw` | `/realsense/D555_<Serial>_Infrared_2` | `sensor_msgs/msg/Image` |
 | `/camera/camera/depth/camera_info` | `/realsense/D555_<Serial>_Depth/camera_info` | `sensor_msgs/msg/CameraInfo` |
 | `/camera/camera/color/camera_info` | `/realsense/D555_<Serial>_Color/camera_info` | `sensor_msgs/msg/CameraInfo` |
 | `/camera/camera/depth/metadata` | `/realsense/D555_<Serial>_Depth/metadata` | `std_msgs/msg/String` |
 | `/camera/camera/color/metadata` | `/realsense/D555_<Serial>_Color/metadata` | `std_msgs/msg/String` |
+| `/camera/camera/aligned_depth_to_color/image_raw` | `/realsense/D555_<Serial>_Aligned_Depth_To_Color` | `sensor_msgs/msg/Image` |
+| `/camera/camera/depth/color/points` | `/realsense/D555_<Serial>_Depth_Color_Points` | `sensor_msgs/msg/PointCloud2` |
 | `/camera/camera/imu` | `/realsense/D555_<Serial>_Motion` | `sensor_msgs/msg/Imu` |
 | `/tf_static` | `/realsense/D555_<Serial>/tf_static` | `tf2_msgs/msg/TFMessage` |
 
@@ -398,18 +504,13 @@ The D555 publishes per-stream metadata containing hardware-level frame informati
 **Available metadata topics per stream:**
 ```
 /realsense/<SN>_Depth/metadata              (std_msgs/msg/String)
-/realsense/<SN>_Depth/metadata_legacy       (realsense2_camera_msgs/msg/Metadata)
 /realsense/<SN>_Color/metadata
-/realsense/<SN>_Color/metadata_legacy
 /realsense/<SN>_Infrared_1/metadata
-/realsense/<SN>_Infrared_1/metadata_legacy
 /realsense/<SN>_Infrared_2/metadata
-/realsense/<SN>_Infrared_2/metadata_legacy
-/realsense/<SN>_CompressedColor/metadata
-/realsense/<SN>_CompressedColor/metadata_legacy
 /realsense/<SN>_Motion/metadata
-/realsense/<SN>_Motion/metadata_legacy
 ```
+
+`metadata_legacy` topics are not present by default on tested 7.58 firmware.
 
 **Echo metadata from the command line:**
 ```bash
@@ -487,20 +588,35 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
 - **Note:** The device will disconnect from DDS and reappear after approximately 5–10 seconds.
 
 #### Device Information
-- **Service name:** `get_device_info_std`
-- Retrieve device information — serial number, firmware version, etc.
-- **Type:** `std_srvs/srv/Trigger`
-- Call example:
+- **Service names:** `get_device_info`, `get_device_info_std`
+- Retrieve device information: serial number, firmware version, sensors, and transport.
+- **Types:** `realsense2_camera_msgs/srv/DeviceInfo` and `std_srvs/srv/Trigger`
+- Typed service example:
+  ```bash
+  ros2 service call /D555_343122300393/get_device_info \
+    realsense2_camera_msgs/srv/DeviceInfo "{}"
+  ```
+  This returns typed fields such as `device_name`, `serial_number`,
+  `firmware_version`, `sensors`, and `physical_port`.
+- Standard Trigger service example:
   ```bash
   ros2 service call /D555_343122300393/get_device_info_std std_srvs/srv/Trigger
   ```
-- **Response:** `success` (bool) + `message` (JSON string) with device fields:
+- Trigger response: `success` (bool) + `message` (JSON string) with device fields:
 
   | Field | Example Value |
   |:------|:--------------|
   | `serial` | `"343122300393"` |
   | `product` | `"D555"` |
-  | `firmware` | `"7.58.38048.7889"` |
+  | `firmware` | `"7.58.40177.x"` |
+
+- `Device.Info` parameter:
+  ```bash
+  ros2 param get /D555_343122300393 Device.Info
+  ros2 param describe /D555_343122300393 Device.Info
+  ```
+  `param get` returns compact JSON that fits the ROS parameter string response.
+  `param describe` provides the full JSON device description.
 
 #### Help
 - **Service name:** `help`
@@ -560,11 +676,12 @@ The device exposes the following services under the namespace `/<DeviceModel>_<S
 | realsense-ros (D4xx) | D555 Native | Type |
 | :--- | :--- | :--- |
 | `/camera/camera/hw_reset` | `/D555_<Serial>/hw_reset` | `std_srvs/srv/Empty` |
-| `/camera/camera/device_info` | `/D555_<Serial>/get_device_info_std` | `std_srvs/srv/Trigger` |
+| `/camera/camera/device_info` | `/D555_<Serial>/get_device_info` | `realsense2_camera_msgs/srv/DeviceInfo` |
 | `/camera/camera/get_parameters` | `/D555_<Serial>/get_parameters` | `rcl_interfaces/srv/GetParameters` |
 | `/camera/camera/set_parameters` | `/D555_<Serial>/set_parameters` | `rcl_interfaces/srv/SetParameters` |
 | `/camera/camera/list_parameters` | `/D555_<Serial>/list_parameters` | `rcl_interfaces/srv/ListParameters` |
 | `/camera/camera/describe_parameters` | `/D555_<Serial>/describe_parameters` | `rcl_interfaces/srv/DescribeParameters` |
+| — | `/D555_<Serial>/get_device_info_std` | `std_srvs/srv/Trigger` |
 | — | `/D555_<Serial>/help` | `std_srvs/srv/Trigger` |
 | — | `/D555_<Serial>/get_parameter_types` | `rcl_interfaces/srv/GetParameterTypes` |
 
@@ -624,25 +741,64 @@ rclpy.shutdown()
 - **Theoretical max (all streams):** ~266 Mbps uncompressed
 - **Practical (with JPEG compression):** ~70–110 Mbps
 
+### High-bandwidth DDS pacing
+
+Depth and compressed color profiles may report 30 FPS while ROS subscribers only
+receive about 15-23 FPS. This usually means the device is still producing frames
+at 30 FPS, but large DDS/UDP samples are being dropped on the receive path. You
+can confirm this by checking message timestamps:
+
+```bash
+ros2 topic echo --qos-reliability best_effort \
+  /realsense/D555_<Serial>_Depth --field header.stamp
+```
+
+If the header timestamp increments by about 33.3 ms but `ros2 topic echo`
+prints `A message was lost!!!`, the camera cadence is 30 FPS and the loss is in
+the DDS/network receive path.
+
+On r58.3, setting `Device.Transmission_Delay` adds microsecond-level pacing to
+large DDS data fragments. This reduces Ethernet/DDS microbursts without changing
+the stream profile:
+
+```bash
+ros2 param set /D555_<Serial> Device.Transmission_Delay 36
+ros2 topic hz /realsense/D555_<Serial>_Depth
+ros2 topic hz /realsense/D555_<Serial>_Color/compressed
+```
+
+On the tested D555 r58.3 firmware, `Device.Transmission_Delay=36` restored
+Depth and Color/compressed from about 15-23 FPS to about 30 FPS with MTU 9000.
+Use `48` for a more conservative stress-test setting if multiple large streams
+still report dropped samples.
+
 ### Known Limitations
 
 > **Note:** The following limitations apply to firmware version **7.58.x**. Some may be resolved in future firmware releases.
 
 1. **Request Rate Limiting:** Limit service calls to approximately 1–2 per second, or add a 500 ms delay between burst requests. The SafeDDS ACK window is limited.
-2. **Sequential Parameter Processing:** `set_parameters` processes parameters sequentially; there is no transactional atomicity.
-3. **String Length Limits:** Parameter names are limited to 128 characters; string values to 256 characters.
-4. **No Point Cloud Generation:** Use `depth_image_proc` with `camera_info` to generate point clouds on the host.
+2. **Batch Parameter Semantics:** Prefer `set_parameters_atomically` when multiple parameters must be applied together; plain `set_parameters` returns one result per parameter.
+3. **String Length Limits:** Parameter names and string values use fixed-size firmware buffers. `Device.Info` returns compact JSON from `ros2 param get`; use `ros2 param describe` or `get_device_info` for the full device description.
+4. **Native PointCloud2 Validation:** r58.3 exposes `/realsense/<SN>_Depth_Color_Points` after `Depth.option.Enable_PointCloud`, but on one tested D555 setup no PointCloud2 sample was received in a 25-30 second echo window. Use host `depth_image_proc` for production point cloud until native samples are confirmed.
+5. **ObjectDetection Output:** `/realsense/<SN>_ObjectDetection` may publish JSON with `number_of_detections: 0` in an empty scene. `ObjectDetection.option.Object_Distance=1` can return `Invalid value` if Depth or AlignedDepth streaming is already active; stop those subscribers before enabling the depth-cache distance path.
+6. **Pre-stream Filter Changes:** Apply decimation and improved close range depth settings before starting high-bandwidth stream tests when possible.
+7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.
+8. **Parameter Name Compatibility:** `Depth.option_Gain` and other underscore-separated legacy aliases are not supported on r58.3. Test scripts should discover parameters with `ros2 param list` and skip options that are absent.
 
 <hr>
 
 ## Troubleshooting
 
 ### Device not found in `ros2 node list`
-- **Cause:** Firewall blocking multicast, different `ROS_DOMAIN_ID`, or network misconfiguration.
+- **Cause:** Firewall blocking multicast, different `ROS_DOMAIN_ID`, wrong DDS middleware on Jazzy, or network misconfiguration.
 - **Fix:**
   ```bash
   # Check ROS_DOMAIN_ID matches (default 0)
   echo $ROS_DOMAIN_ID
+
+  # Jazzy only: verify Cyclone DDS is selected
+  echo $RMW_IMPLEMENTATION
+  export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
   # Disable firewall temporarily to test
   sudo ufw disable
@@ -657,7 +813,7 @@ rclpy.shutdown()
 
 ### "Parameter not set" error
 - **Cause:** Parameter name typo or unsupported parameter.
-- **Fix:** Run `ros2 param list /D555_<Serial>` to verify exact parameter names.
+- **Fix:** Run `ros2 param list /D555_<Serial>` to verify exact parameter names. For example, `Depth.option_Gain` is not valid on r58.3. Use `Depth.option.Gain` only when it appears in the parameter list; otherwise skip that control in automated tests.
 
 ### Topic data not received / QoS mismatch
 - **Cause:** Image and metadata topics use `BEST_EFFORT` reliability; subscribers must match.
@@ -666,6 +822,21 @@ rclpy.shutdown()
   from rclpy.qos import QoSProfile, ReliabilityPolicy
   qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
   ```
+
+### Image topic FPS is lower than the 30 FPS profile
+- **Cause:** The device may be producing 30 FPS, but large BEST_EFFORT DDS
+  samples are dropped when the Ethernet/DDS packets arrive as tight bursts. This
+  is more visible on Depth because the raw frame payload is much larger than
+  JPEG-compressed color.
+- **Fix:** Enable DDS bulk-fragment pacing:
+  ```bash
+  ros2 param set /D555_<Serial> Device.Transmission_Delay 36
+  ros2 topic hz /realsense/D555_<Serial>_Depth
+  ros2 topic hz /realsense/D555_<Serial>_Color/compressed
+  ```
+- **Verification:** If `ros2 topic echo --field header.stamp` shows 33.3 ms
+  timestamp intervals but also prints `A message was lost!!!`, this is receive
+  path loss, not a camera profile issue.
 
 ### CDR deserialization errors
 - **Cause:** Potential firmware/middleware version mismatch.
