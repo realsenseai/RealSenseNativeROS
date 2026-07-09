@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-RealSense D555e Sync Verification Tool
+RealSense D555 Sync Verification Tool
 
 Verifies:
   Test A - Intra-camera sync (single or multi):
@@ -156,7 +156,7 @@ def run_cmd(cmd, timeout: int = 15) -> Tuple[int, str]:
 def discover_d555_nodes(min_cameras: int = 0,
                         retries: int = 5,
                         delay: float = 3.0) -> List[str]:
-    """Discover D555e nodes.  If *min_cameras* > 0, retry up to *retries*
+    """Discover D555 nodes.  If *min_cameras* > 0, retry up to *retries*
     times (with daemon restart) until at least that many are found."""
     for attempt in range(retries):
         rc, out = run_cmd("ros2 node list")
@@ -234,7 +234,7 @@ def _swap_fps(profile: str, new_fps: str) -> str:
 def stop_start_streams(nodes: List[str], restart_wait: float = 5.0):
     """Restart streams by toggling profiles to a different fps then back."""
     profiles: Dict[str, Dict[str, str]] = {}
-    param_names = ["Depth.Profile", "CompRGB.Profile"]
+    param_names = ["Depth.Profile", "RGB.Profile"]
 
     for n in nodes:
         profiles[n] = {}
@@ -265,7 +265,7 @@ def stop_start_streams(nodes: List[str], restart_wait: float = 5.0):
 
 def set_fps(nodes: List[str], fps: int, restart_wait: float = 5.0):
     """Change all streams to the specified FPS by swapping profile."""
-    param_names = ["Depth.Profile", "CompRGB.Profile"]
+    param_names = ["Depth.Profile", "RGB.Profile"]
     target = str(fps)
     print(f"  Setting all streams to {fps} FPS ...")
     for n in nodes:
@@ -732,11 +732,11 @@ def print_summary(results: List[SyncTestResult], sync_mode: str):
 def print_usage():
     text = """\
 ============================================================
-RealSense D555e Sync Verification Tool
+RealSense D555 Sync Verification Tool
 ============================================================
 
 DESCRIPTION
-  Verifies frame synchronization of Intel RealSense D555e
+  Verifies frame synchronization of Intel RealSense D555
   cameras over ROS 2.  Uses Sensor Timestamp from metadata
   (std_msgs/String) paired by closest Sensor Timestamp.
 
@@ -755,9 +755,9 @@ TESTS
            frames.
 
 PREREQUISITES
-  - ROS 2 Humble (or compatible)
+  - ROS 2 Humble, or ROS 2 Jazzy with Cyclone DDS
   - Python 3 with rclpy, sensor_msgs, std_msgs
-  - D555e camera(s) streaming on the correct ROS_DOMAIN_ID
+  - D555 camera(s) streaming on the correct ROS_DOMAIN_ID
   - export ROS_DOMAIN_ID=<N>  (set before running)
 
 USAGE
@@ -837,7 +837,7 @@ def main():
         sys.exit(2)
 
     parser = argparse.ArgumentParser(
-        description="RealSense D555e Sync Verification",
+        description="RealSense D555 Sync Verification",
         add_help=True,
     )
     parser.add_argument("--rounds", type=int, default=3,
@@ -876,17 +876,17 @@ def main():
     all_results: List[SyncTestResult] = []
 
     print("=" * 60)
-    print("RealSense D555e Sync Verification")
+    print("RealSense D555 Sync Verification")
     print("=" * 60)
     print(f"  Timestamp source: Sensor Timestamp (from metadata JSON)")
     print(f"  Frame pairing:    Closest Sensor Timestamp (binary search)")
     print(f"  FPS to test:      {', '.join(str(f) for f in args.fps_list)}")
 
     # 1. Discover cameras
-    print("\n[Step 1] Discovering D555e cameras ...")
+    print("\n[Step 1] Discovering D555 cameras ...")
     nodes = discover_d555_nodes(min_cameras=args.min_cameras)
     if not nodes:
-        print("ERROR: No D555e nodes found.  Check ROS_DOMAIN_ID.")
+        print("ERROR: No D555 nodes found.  Check ROS_DOMAIN_ID.")
         sys.exit(1)
     print(f"  Found {len(nodes)} camera(s):")
     for n in nodes:
@@ -897,8 +897,12 @@ def main():
 
     # 2. Set sync mode
     print(f"\n[Step 2] Setting sync mode: {sync_mode}")
+    sync_mode_ok = True
     for n in nodes:
-        set_sync_mode(n, sync_mode)
+        sync_mode_ok = set_sync_mode(n, sync_mode) and sync_mode_ok
+    if not sync_mode_ok:
+        print("ERROR: Failed to set Camera_Sync_Mode on at least one camera.")
+        sys.exit(1)
     time.sleep(2)
 
     ext_with_signal = args.enable_ext_sync and not args.no_signal

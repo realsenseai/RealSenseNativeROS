@@ -1,8 +1,8 @@
-# RealSense D555e Sync Verification Tool
+# RealSense D555 Sync Verification Tool
 
 ## Overview
 
-This tool verifies the **frame synchronization** of Intel RealSense D555e
+This tool verifies the **frame synchronization** of Intel RealSense D555
 cameras over ROS 2.  It supports two sync modes and optional PTP
 cross-validation.
 
@@ -87,11 +87,10 @@ trigger pulse.
 For multi-camera setups, an external trigger signal replaces the internal PWM.
 All cameras receive the same trigger pulse, so they all expose simultaneously.
 
-The hardware configuration is **fundamentally different** from Internal mode
-(see the "Source Code Analysis: Internal vs External Mode" section below):
-the IPU PWM controller is disabled (`pwm_mode=0`), and both sensors are
-configured to receive trigger pulses from the external STROBE input pin
-(USB SBU1/2) instead of the internal `FW_GLOBAL` source.
+The hardware behavior is **fundamentally different** from Internal mode
+(see the "Internal vs External Trigger Behavior" section below): the camera
+stops using its internal trigger source, and both sensors expect trigger pulses
+from the external sync input.
 
 - **With signal**: All cameras are frame-locked.  Both Depth and Color
   sensors fire on the same trigger pulse, so the intra-camera offset
@@ -190,7 +189,7 @@ flowchart TD
 
 - **ROS 2 Humble**, or **ROS 2 Jazzy with Cyclone DDS**
 - Python 3 with `rclpy`, `sensor_msgs`, `std_msgs`
-- One or more D555e cameras visible on the ROS 2 domain
+- One or more D555 cameras visible on the ROS 2 domain
 - `ROS_DOMAIN_ID` set correctly (e.g., `export ROS_DOMAIN_ID=2`)
 - On Jazzy, `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 
@@ -199,8 +198,8 @@ flowchart TD
 Run without arguments or with `--help` to see full usage information:
 
 ```bash
-python3 tests/scripts/test_external_sync.py
-python3 tests/scripts/test_external_sync.py --help
+python3 apps/external_sync/test_external_sync.py
+python3 apps/external_sync/test_external_sync.py --help
 ```
 
 ### Options
@@ -230,23 +229,23 @@ python3 tests/scripts/test_external_sync.py --help
 export ROS_DOMAIN_ID=2
 
 # Single camera — internal sync verification (test 30 and 15 FPS)
-python3 tests/scripts/test_external_sync.py --samples 60
+python3 apps/external_sync/test_external_sync.py --samples 60
 
 # Single camera — test only 30 FPS
-python3 tests/scripts/test_external_sync.py --samples 60 --fps 30
+python3 apps/external_sync/test_external_sync.py --samples 60 --fps 30
 
 # Single camera — external sync without signal
-python3 tests/scripts/test_external_sync.py --enable-ext-sync --no-signal --samples 60
+python3 apps/external_sync/test_external_sync.py --enable-ext-sync --no-signal --samples 60
 
 # Multi-camera — external sync WITH signal
-python3 tests/scripts/test_external_sync.py --enable-ext-sync --samples 60 \
+python3 apps/external_sync/test_external_sync.py --enable-ext-sync --samples 60 \
     --min-cameras 4
 
 # Multi-camera — external sync with 3 stop/start rounds
-python3 tests/scripts/test_external_sync.py --enable-ext-sync --rounds 3
+python3 apps/external_sync/test_external_sync.py --enable-ext-sync --rounds 3
 
 # Multi-camera — external sync + PTP cross-validation
-python3 tests/scripts/test_external_sync.py --enable-ext-sync --rounds 3 \
+python3 apps/external_sync/test_external_sync.py --enable-ext-sync --rounds 3 \
     --enable-ptp
 ```
 
@@ -304,7 +303,7 @@ This approach handles:
 
 Stream restart is performed by **changing the profile parameter** (e.g.,
 `Depth.Profile` from `z16, 896, 504, 30` to `z16, 896, 504, 15` then back,
-and `CompRGB.Profile` similarly).
+and `RGB.Profile` similarly).
 This restarts the stream pipeline **without resetting the camera hardware**.
 The firmware clock keeps running, so timestamps continue from where they left
 off.
@@ -475,48 +474,39 @@ The absolute average offset (~17ms) confirms that Color and Depth sensors are
 **not synchronized** — they fire at different moments.  But because they share
 the same clock source, the offset doesn't drift (std ≈ 0).
 
-#### Source Code Analysis: Internal vs External Mode
+#### Internal vs External Trigger Behavior
 
-The CSF (Camera Sensor Framework) driver configures completely different
-hardware paths for each mode:
+The camera uses different trigger paths for Internal and External sync modes:
 
-| Parameter      | Internal (PWM Master)            | External                           |
-| -------------- | -------------------------------- | ---------------------------------- |
-| PWM controller | **Enabled** (`pwm_mode=1`)       | **Disabled** (`pwm_mode=0`)        |
-| Trigger source | `CSF_SYNC_TRIGGER_SRC_FW_GLOBAL` | `CSF_SYNC_TRIGGER_SRC_STROBE`      |
-| GPIO DO source | `SOURCE_GLOBAL_TRIGGER`          | `SOURCE_STROBE_IN_x` (rising edge) |
-| Sensor regs    | `ext_vs_en=1` (0x3823=0x30)      | Same `ext_vs_en=1` (0x3823=0x30)   |
-
-Source files:
-- Depth sensor (OG02B10): `csf_og02b10_configuration.h` — `amr_og02b10_pwm_master_fsin` vs `amr_og02b10_external_vsync_fsin`
-- RGB sensor (OV9782): `csf_ov9782_configuration.h` — `ov9782_pwm_master_fsin` vs `ov9782_external_vsync_fsin`
-- PWM controller: `pwm.c` — `pwm_sync_config_enable()`, `pwm_global_trigger()`
-- Sync mode enum: `IComponent.h` — `SyncMode::PWMMasterMode=2`, `SyncMode::External=3`
+| Mode | Trigger source | Expected behavior |
+| ---- | -------------- | ----------------- |
+| Internal | Camera-generated trigger | Depth and Color expose on the same internal trigger pulse |
+| External, with signal | External sync input | Depth and Color expose on the same external trigger pulse |
+| External, no signal | No valid trigger input | Sensors free-run; this is expected to report NOT SYNCED |
 
 **Internal mode** (`PWMMasterMode`):
 ```
-IPU PWM Controller (pwm_mode=1)
-  │ generates periodic FW_GLOBAL trigger pulses
-  ├──► GPIO DO8 ──► OV9782 (RGB)    [ext_vs_en=1, slave]
-  └──► GPIO DO9 ──► OG02B10 (Depth) [ext_vs_en=1, slave]
+Camera internal trigger source
+  │ generates periodic trigger pulses
+  ├──► Color sensor
+  └──► Depth sensor
 ```
-Both sensors receive the same PWM-generated pulse → fire simultaneously →
+Both sensors receive the same camera-generated pulse → fire simultaneously →
 Sensor Timestamp offset ≈ 0ms.
 
 **External mode** (no signal):
 ```
-STROBE_IN_1 pin (USB SBU1/2) ── no signal ──╳
-  │ (pwm_mode=0, PWM controller disabled)
-  ├──► GPIO DO8 ──► OV9782 (RGB)    [ext_vs_en=1, slave, no trigger]
-  └──► GPIO DO9 ──► OG02B10 (Depth) [ext_vs_en=1, slave, no trigger]
+External sync input ── no signal ──╳
+  ├──► Color sensor configured for external trigger
+  └──► Depth sensor configured for external trigger
 ```
-Both sensors have `ext_vs_en=1` (register `0x3823=0x30`) but receive no
-external VSYNC.  The OmniVision sensors **free-run on their PLLs** when
-no external trigger arrives → Sensor Timestamp offset ≈ 17ms.
+Both sensors are configured for external triggering but receive no external
+VSYNC. The sensors **free-run** when no external trigger arrives, so the
+Sensor Timestamp offset is large and stable instead of near zero.
 
 #### Why Free-Running PLLs Still Produce Constant Offsets (std ≈ 0)
 
-Both sensors on the D555e board share the **same reference clock oscillator**.
+Both sensors in the D555 camera share the **same reference clock oscillator**.
 Their PLLs derive timing from this common source:
 
 - **Same frequency**: Both PLLs produce identical frame rates → frame
@@ -544,13 +534,13 @@ Running without arguments prints usage info and exits:
 ```
 $ python3 test_external_sync.py
 ============================================================
-RealSense D555e Sync Verification Tool
+RealSense D555 Sync Verification Tool
 ============================================================
 
 DESCRIPTION
-  Verifies frame synchronization of Intel RealSense D555e
+  Verifies frame synchronization of Intel RealSense D555
   cameras over ROS 2.  Uses Sensor Timestamp from metadata
-  (std_msgs/String) paired by sorted index (alignment search).
+  (std_msgs/String) paired by closest Sensor Timestamp.
   ...
 ```
 
@@ -558,12 +548,12 @@ DESCRIPTION
 
 ```
 ============================================================
-RealSense D555e Sync Verification
+RealSense D555 Sync Verification
 ============================================================
   Timestamp source: Sensor Timestamp (from metadata JSON)
-  Frame pairing:    Sorted index (alignment search)
+  Frame pairing:    Closest Sensor Timestamp (binary search)
 
-[Step 1] Discovering D555e cameras ...
+[Step 1] Discovering D555 cameras ...
   Found 1 camera(s):
     /D555_343122300393
 
@@ -577,7 +567,7 @@ RealSense D555e Sync Verification
 ANALYSIS (sync_mode=Internal)
 ============================================================
 
-[Test A] Intra-camera RGB/Depth sync (Sensor Timestamp, sorted-index pairing)
+[Test A] Intra-camera RGB/Depth sync (closest Sensor Timestamp pairing)
   Threshold (std-dev / interval diff): 2.0 ms
   Internal sync mode: expect Color/Depth synced (|avg offset| < 5ms)
     [343122300393] Paired frames: 60 (D=60, C=60)
@@ -605,12 +595,12 @@ ANALYSIS (sync_mode=Internal)
 
 ```
 ============================================================
-RealSense D555e Sync Verification
+RealSense D555 Sync Verification
 ============================================================
   Timestamp source: Sensor Timestamp (from metadata JSON)
-  Frame pairing:    Sorted index (alignment search)
+  Frame pairing:    Closest Sensor Timestamp (binary search)
 
-[Step 1] Discovering D555e cameras ...
+[Step 1] Discovering D555 cameras ...
   Found 1 camera(s):
     /D555_343122300393
 
@@ -624,7 +614,7 @@ RealSense D555e Sync Verification
 ANALYSIS (sync_mode=External)
 ============================================================
 
-[Test A] Intra-camera RGB/Depth sync (Sensor Timestamp, sorted-index pairing)
+[Test A] Intra-camera RGB/Depth sync (closest Sensor Timestamp pairing)
   Threshold (std-dev / interval diff): 2.0 ms
   External sync mode: expect Color/Depth NOT synced (|avg offset| > 5ms)
     [343122300393] Paired frames: 60 (D=60, C=60)
@@ -728,14 +718,14 @@ ANALYSIS (sync_mode=External)
 
 | Symptom                                             | Possible Cause                               | Fix                                                                                                                                                                                                       |
 | --------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No D555e nodes found                                | Wrong `ROS_DOMAIN_ID` or wrong DDS middleware on Jazzy | `export ROS_DOMAIN_ID=2`; on Jazzy also `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`; verify `ros2 node list`                                                                                           |
-| No D555e nodes found                                | DDS discovery stale                          | Use `--min-cameras N` (auto-restarts daemon), or manually: `ros2 daemon stop && ros2 daemon start`                                                                                                        |
+| No D555 nodes found                                | Wrong `ROS_DOMAIN_ID` or wrong DDS middleware on Jazzy | Set `ROS_DOMAIN_ID` to match the camera; on Jazzy also set `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`; verify `ros2 node list`                                                                               |
+| No D555 nodes found                                | DDS discovery stale                          | Use `--min-cameras N` (auto-restarts daemon), or manually: `ros2 daemon stop && ros2 daemon start`                                                                                                        |
 | `ros2 node list` returns empty/partial              | Daemon cache stale after many CLI calls      | The tool auto-flushes every 20 calls.  Manually: `ros2 daemon stop && sleep 1 && ros2 daemon start`                                                                                                       |
 | No Depth/Color metadata                             | Image topic not subscribed                   | Ensure Image subscription active (tool does this automatically)                                                                                                                                           |
 | No Depth/Color metadata                             | Stream not active                            | Check camera is streaming: `ros2 topic hz /realsense/D555_{serial}_Depth`                                                                                                                                 |
-| No Color metadata for all cameras                   | Color streams dead after many mode switches  | Restart `realsense-viewer` (firmware issue — Color or Color/compressed stops publishing after repeated mode changes)                                                                                        |
+| No Color metadata for all cameras                   | Color stream not publishing after many mode switches | Restart the camera and rerun the test                                                                                                                                                                     |
 | No Color metadata for one camera                    | Camera Color stream intermittent             | The Color DDS stream on some cameras may be unreliable; retry the test                                                                                                                                    |
-| Test A SKIP: "No Color metadata"                    | CompRGB stream not publishing                | Check `ros2 topic hz /realsense/D555_{serial}_Color/compressed`.  Restart camera if needed.                                                                                                               |
+| Test A SKIP: "No Color metadata"                    | Color stream not publishing                  | Check `ros2 topic hz /realsense/D555_{serial}_Color`. Restart camera if needed.                                                                                                                           |
 | Test A FAIL after mode switch                       | Mode-switching transient                     | The firmware may need time to stabilize after switching between Internal/External.  Re-run the test without changing mode.                                                                                |
 | Test A FAIL: large offset in External (with signal) | Sync not working or software timestamp issue | Verify external trigger signal is connected and active.  Check firmware sensor timestamping logic.  A large offset (e.g. ~46ms) indicates the sensors are not firing simultaneously on the trigger pulse. |
 | Test A FAIL: NOT SYNCED in Internal mode            | Sync hardware issue                          | Check firmware, restart camera, verify Internal mode param                                                                                                                                                |

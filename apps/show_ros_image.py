@@ -16,7 +16,6 @@
 
 SETUP (Linux):
   source /opt/ros/humble/setup.bash
-  Or use the wrapper:  ./run_show_ros_image.sh [args...]
 
 Usage examples:
   # --- GUI mode (requires DISPLAY / X11 forwarding) ---
@@ -235,7 +234,7 @@ def fetch_device_info(serial: str) -> dict:
     # Check for "Type: not set" — old FW that doesn't expose Device.Info
     if "not set" in out.lower():
         return {
-            "sn_fw": f"SN:{serial}  Update FW >=57.7 to show more info",
+            "sn_fw": f"SN:{serial}  Update FW >=7.57.7 to show more info",
             "net":   ""
         }
 

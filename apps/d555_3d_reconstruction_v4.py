@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-D555 Camera 3D Reconstruction Application - V4 Pro Edition
+D555 Camera 3D Reconstruction Application
 
 Features:
 - 3D RGB textured view (rotating RGB point cloud)
@@ -35,7 +35,6 @@ Controls:
     +/-     - Zoom in/out
     1/2     - Rotation speed
 
-Author: D555 Camera Team
 """
 
 import argparse
@@ -106,7 +105,7 @@ class Transform:
 
 
 class D555ReconstructionV4(Node):
-    """D555 3D Reconstruction Node - V4 Pro."""
+    """D555 3D Reconstruction Node."""
 
     def __init__(self, enable_gui: bool = False):
         super().__init__('d555_3d_reconstruction_v4')
@@ -176,7 +175,7 @@ class D555ReconstructionV4(Node):
         self.device_serial = None
         self.topic_prefix = None
 
-        self.get_logger().info("D555 3D Reconstruction V4 Pro starting...")
+        self.get_logger().info("D555 3D Reconstruction starting...")
         self._discover_device()
 
     def _discover_device(self):
@@ -220,9 +219,8 @@ class D555ReconstructionV4(Node):
         self.get_logger().info(
             f"Subscribed to {prefix}/tf_static with BEST_EFFORT + TRANSIENT_LOCAL")
 
-        # Note: Per-stream metadata topics (e.g., _Depth/metadata) are not yet implemented
-        # in device-mgr. The device publishes a shared metadata topic instead.
-        # Keeping these subscriptions for future compatibility.
+        # Per-stream metadata topics publish JSON when the matching stream has
+        # an active subscriber.
         for stream in ['Depth', 'Color', 'Infrared_1', 'Infrared_2', 'Motion']:
             self.create_subscription(
                 String, f'{prefix}_{stream}/metadata',
@@ -467,7 +465,7 @@ class ProGUI:
         self.paused = False
 
         # Window
-        self.window_name = "D555 3D Reconstruction V4 Pro"
+        self.window_name = "D555 3D Reconstruction"
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.window_name, 1920, 1080)
 
@@ -855,7 +853,7 @@ class ProGUI:
         # Title bar
         cv2.rectangle(combined, (0, 0),
                       (combined.shape[1], 30), (15, 15, 18), -1)
-        title = f"D555 3D Reconstruction V4 Pro | Device: {self.node.device_serial or 'N/A'} | FPS: {self.fps:.0f} | Zoom: {self.zoom:.1f}x"
+        title = f"D555 3D Reconstruction | Device: {self.node.device_serial or 'N/A'} | FPS: {self.fps:.0f} | Zoom: {self.zoom:.1f}x"
         cv2.putText(combined, title, (10, 22),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.ACCENT, 1)
 
@@ -914,7 +912,7 @@ class ProGUI:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='D555 3D Reconstruction V4 Pro')
+        description='D555 3D Reconstruction')
     parser.add_argument(
         '-gui', '--gui', action='store_true', help='Enable GUI')
     args, ros_args = parser.parse_known_args()
@@ -925,7 +923,7 @@ def main():
     gui = ProGUI(node) if args.gui else None
 
     print("\n" + "="*70)
-    print("   D555 3D Reconstruction V4 Pro")
+    print("   D555 3D Reconstruction")
     print("="*70)
     print(f"   GUI: {'Enabled' if args.gui else 'Disabled'}")
     print(f"   ROS_DOMAIN_ID: {os.environ.get('ROS_DOMAIN_ID', '0')}")
