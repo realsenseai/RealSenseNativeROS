@@ -55,12 +55,19 @@ Usage examples:
   # Device diagnostics JSON topic
   python3 show_ros_image.py --serial 344522301530 --stream Diagnostics --duration 5
 
+  # Firmware log JSON topic; enable publishing before subscribing, disable it when done.
+  ros2 param set /D555_344522301530 Device.Log_Level 12
+  ros2 param set /D555_344522301530 Device.Log_Enable true
+  python3 show_ros_image.py --serial 344522301530 --stream FirmwareLog --duration 10
+  ros2 param set /D555_344522301530 Device.Log_Enable false
+
 Stream aliases:
   IR1 / IR2 / IR3  →  Infrared_1/2/3
   CompColor        →  Color/compressed
   Points/PointCloud → Depth_Color_Points
   AlignedDepth     →  Aligned_Depth_To_Color
   Diagnostics/Diag →  /realsense/D555_<SN>/diagnostics
+  FirmwareLog/FwLog → /realsense/D555_<SN>/firmware_log
 
 Output files (headless / debug):
   Log:   ros2-<SN>-<stream>-image-<YYYYMMDD_HHMMSS>.log
@@ -124,6 +131,8 @@ def normalize_to_u8(x: np.ndarray) -> np.ndarray:
 def build_topic(serial: str, stream: str) -> str:
     if stream == "Diagnostics":
         return f"/realsense/D555_{serial}/diagnostics"
+    if stream == "FirmwareLog":
+        return f"/realsense/D555_{serial}/firmware_log"
     if stream == "CompressedColor":
         return f"/realsense/D555_{serial}_Color/compressed"
     return f"/realsense/D555_{serial}_{stream}"
@@ -145,7 +154,11 @@ def is_pointcloud_stream(stream: str, topic: str) -> bool:
 def is_string_stream(stream: str, topic: str) -> bool:
     s = (stream or "").lower()
     t = (topic or "").lower()
-    return s in ("diagnostics", "diag") or t.endswith("/diagnostics")
+    return (
+        s in ("diagnostics", "diag", "firmwarelog", "fwlog")
+        or t.endswith("/diagnostics")
+        or t.endswith("/firmware_log")
+    )
 
 
 def detect_serial() -> str:
@@ -418,6 +431,10 @@ _STREAM_ALIASES: dict[str, str] = {
     "aligned_depth_to_color": "Aligned_Depth_To_Color",
     "diag":         "Diagnostics",
     "diagnostics":  "Diagnostics",
+    "firmwarelog":  "FirmwareLog",
+    "firmware_log": "FirmwareLog",
+    "fwlog":        "FirmwareLog",
+    "log":          "FirmwareLog",
     "color":        "Color",
     "depth":        "Depth",
     "motion":       "Motion",
@@ -717,6 +734,12 @@ class Viewer(Node):
                                 lines.append(f"  ... {len(values) - 3} more values")
                     if len(status) > 4:
                         lines.append(f"... {len(status) - 4} more status entries")
+                elif all(k in data for k in ("ts_us", "level", "tag", "message")):
+                    title = "Firmware Log"
+                    lines.append(f"ts_us: {data.get('ts_us')}")
+                    lines.append(f"level: {data.get('level')}")
+                    lines.append(f"tag: {data.get('tag')}")
+                    lines.append(f"message: {data.get('message')}")
                 else:
                     title = "JSON String"
                     lines.extend(f"{k}: {v}" for k, v in list(data.items())[:8])
@@ -1087,7 +1110,8 @@ def main():
               "IR1=Infrared_1, IR2=Infrared_2, IR3=Infrared_3, "
               "CompColor=Color/compressed, Points=Depth_Color_Points, "
               "AlignedDepth=Aligned_Depth_To_Color, "
-              "Diagnostics=/realsense/D555_<SN>/diagnostics.  "
+              "Diagnostics=/realsense/D555_<SN>/diagnostics, "
+              "FirmwareLog=/realsense/D555_<SN>/firmware_log.  "
               "e.g. Depth+IR1+IR2"),
     )
     ap.add_argument(

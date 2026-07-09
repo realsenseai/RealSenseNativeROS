@@ -16,7 +16,7 @@ Designed for both interactive viewing and automated CI/regression testing.
 
 ### Features
 
-- **Multi-stream tiling:** View Depth, Color, IR1, IR2, Color/compressed, aligned depth, Diagnostics JSON, and PointCloud2 smoke-test streams.
+- **Multi-stream tiling:** View Depth, Color, IR1, IR2, Color/compressed, aligned depth, Diagnostics/FirmwareLog JSON, and PointCloud2 smoke-test streams.
 - **Multi-camera:** Comma-separated serials for single-process multi-camera viewing.
 - **HW FPS measurement:** Sliding-window (2 s) real-time frame rate, independent of display rendering.
 - **Headless CI mode (default):** Prints status to stdout, writes a log file, auto-cleans on PASS.
@@ -69,6 +69,15 @@ python3 show_ros_image.py --serial 343122300393 --stream Diagnostics --duration 
 ros2 topic echo /realsense/D555_343122300393/diagnostics \
   --once --qos-reliability best_effort
 
+# Firmware log JSON topic.
+# firmware_log publishes only while Device.Log_Enable=true and a subscriber is present.
+ros2 param set /D555_343122300393 Device.Log_Level 12
+ros2 param set /D555_343122300393 Device.Log_Enable true
+python3 show_ros_image.py --serial 343122300393 --stream FirmwareLog --duration 10
+ros2 topic echo /realsense/D555_343122300393/firmware_log \
+  --qos-reliability best_effort
+ros2 param set /D555_343122300393 Device.Log_Enable false
+
 # ObjectDetection overlay on color; detections and distance fields in meters are scene/model dependent
 ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
 python3 show_ros_image.py --gui --serial 343122300393 --stream Color --od
@@ -104,6 +113,7 @@ export ROS_DOMAIN_ID=2
 | `AlignedDepth` | `Aligned_Depth_To_Color` |
 | `Points`, `PointCloud` | `Depth_Color_Points` |
 | `Diagnostics`, `Diag` | `/realsense/<SN>/diagnostics` |
+| `FirmwareLog`, `FwLog`, `Log` | `/realsense/<SN>/firmware_log` |
 
 ### Command-Line Options
 
@@ -123,7 +133,7 @@ export ROS_DOMAIN_ID=2
 
 - **PASS:** Image streams require HW FPS >= 29.5 and at least one frame received.
 - **PointCloud2 PASS:** PointCloud2 smoke tests require at least one sample and HW FPS >= 0.1. The app keeps hidden Depth + Color guard subscribers active for PointCloud streams.
-- **Diagnostics PASS:** Diagnostics/String topic smoke tests require at least one sample and HW FPS >= 0.1.
+- **String Topic PASS:** Diagnostics and FirmwareLog smoke tests require at least one sample and HW FPS >= 0.1.
 - **FAIL:** Otherwise. Log and pcap (if `--debug`) are preserved for analysis.
 - On PASS, log/pcap artifacts are auto-deleted.
 - If `ros2 topic hz <topic>` reports less than 29.5 FPS, the app will fail by design even when callbacks are received.
@@ -146,6 +156,15 @@ not exposed as a literal `MinZ` parameter; use
 `Depth.filter.Improved_Close_Range_Depth.Enable` and keep it separate from
 decimation. Diagnostics are published as `std_msgs/msg/String` JSON on
 `/realsense/<SN>/diagnostics` when subscribed.
+
+Firmware logs are published as `std_msgs/msg/String` JSON on
+`/realsense/<SN>/firmware_log` after `Device.Log_Enable=true` and a subscriber
+is present. On current r58.3 builds, the topic may remain visible in DDS
+discovery after being enabled once, but it does not emit samples after
+`Device.Log_Enable=false`. The stream is event-driven, so a short `FirmwareLog`
+smoke test can fail if no firmware log is emitted during the test window. Keep
+`ros2 topic echo` running while changing a parameter or starting a stream when
+you need a fresh sample.
 
 ### GUI Layout
 

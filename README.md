@@ -319,6 +319,20 @@ Filter restrictions on r58.3:
 | `ObjectDetection.Profile` | Integer | Read-only object detection FPS profile; tested value: `30` |
 | `ObjectDetection.option.Object_Distance` | Integer | 0/1 toggle. When enabled and accepted, ObjectDetection JSON may include a per-detection `distance` field in meters |
 
+#### Device Log Parameters
+
+Firmware log publishing is disabled by default. On the tested r58.3 build, the
+ROS-facing parameter names use underscores:
+
+| Parameter | Type | Default | Description |
+|:----------|:-----|:--------|:------------|
+| `Device.Log_Enable` | Boolean | `false` | Enable publishing on the `/realsense/<SN>/firmware_log` topic |
+| `Device.Log_Level` | Integer | `8` | Bitmask: verbose=1, debug=2, info=4, warning=8, performance=16; error/test logs always pass |
+| `Device.Log_Tag_Filter` | String | `""` | Optional comma-separated firmware `LOG_TAG` filter, for example `DDS_Server,IPU` |
+
+Use `ros2 param list /D555_<Serial> | grep Device.Log` as the source of truth
+for the exact names on a given firmware build.
+
 #### RGB Sensor Parameters
 
 | Parameter | Type | Range | Default | Description |
@@ -412,6 +426,16 @@ python3 apps/show_ros_image.py \
   --serial 343122300393 --stream Diagnostics --duration 5
 ros2 topic echo /realsense/D555_343122300393/diagnostics \
   --once --qos-reliability best_effort
+
+# Firmware log JSON topic.
+# firmware_log publishes only while Device.Log_Enable=true and a subscriber is present.
+ros2 param set /D555_343122300393 Device.Log_Level 12
+ros2 param set /D555_343122300393 Device.Log_Enable true
+ros2 topic echo /realsense/D555_343122300393/firmware_log \
+  --qos-reliability best_effort
+python3 apps/show_ros_image.py \
+  --serial 343122300393 --stream FirmwareLog --duration 10
+ros2 param set /D555_343122300393 Device.Log_Enable false
 ```
 
 On the tested D555 r58.3 firmware, aligned depth produced
@@ -432,6 +456,15 @@ Diagnostics are published as `std_msgs/msg/String` JSON on
 `/realsense/D555_<Serial>/diagnostics` when there is a subscriber. The
 `apps/show_ros_image.py --stream Diagnostics` path is a smoke test for that
 topic and uses the lower string-topic FPS threshold.
+
+Firmware logs are published as `std_msgs/msg/String` JSON on
+`/realsense/D555_<Serial>/firmware_log`. Publishing is off by default and starts
+only when `Device.Log_Enable=true` and a subscriber is present. On current r58.3
+builds, the topic may remain visible in DDS discovery after being enabled once,
+but it does not emit samples after `Device.Log_Enable=false`. The log stream is
+event-driven, so short smoke tests may receive no sample if the firmware is
+quiet; keep the echo running while changing a parameter or starting a stream if
+you need fresh log activity.
 
 <hr>
 
@@ -510,6 +543,7 @@ Additional r58.3 topics appear only after enabling their parameters:
 | `/realsense/<SN>_Aligned_Depth_To_Color` | `sensor_msgs/msg/Image` | `Depth.option.Align_Depth=1` |
 | `/realsense/<SN>_Aligned_Depth_To_Color/camera_info` | `sensor_msgs/msg/CameraInfo` | `Depth.option.Align_Depth=1` |
 | `/realsense/<SN>_Depth_Color_Points` | `sensor_msgs/msg/PointCloud2` | `Depth.option.Enable_PointCloud=1` or `2` |
+| `/realsense/<SN>/firmware_log` | `std_msgs/msg/String` | `Device.Log_Enable=true` |
 
 **Mapping to realsense-ros topics:**
 
@@ -528,6 +562,7 @@ Additional r58.3 topics appear only after enabling their parameters:
 | `/camera/camera/depth/color/points` | `/realsense/D555_<Serial>_Depth_Color_Points` | `sensor_msgs/msg/PointCloud2` |
 | `/camera/camera/imu` | `/realsense/D555_<Serial>_Motion` | `sensor_msgs/msg/Imu` |
 | Diagnostics | `/realsense/D555_<Serial>/diagnostics` | `std_msgs/msg/String` |
+| Firmware logs | `/realsense/D555_<Serial>/firmware_log` | `std_msgs/msg/String` |
 | `/tf_static` | `/realsense/D555_<Serial>/tf_static` | `tf2_msgs/msg/TFMessage` |
 
 **Subscribe to a stream:**
@@ -838,7 +873,8 @@ multiple large streams still report dropped samples.
 5. **ObjectDetection Output:** `/realsense/<SN>_ObjectDetection` may publish JSON with `number_of_detections: 0` in an empty scene. `ObjectDetection.option.Object_Distance=1` can return `Invalid value` if Depth or AlignedDepth streaming is already active; stop those subscribers before enabling the depth-cache distance path.
 6. **Depth Filter Combinations:** Apply graph-selection filters before starting streams. Decimation + temporal is the validated depth-filter combination. MinZ is exposed as `Depth.filter.Improved_Close_Range_Depth.Enable`; do not combine it with decimation on r58.3. OD distance and depth-filter streaming are separate workflows.
 7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. This is most visible when one camera publishes multiple large topics. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.
-8. **Parameter Name Compatibility:** `Depth.option_Gain` and other underscore-separated legacy aliases are not supported on r58.3. Test scripts should discover parameters with `ros2 param list` and skip options that are absent.
+8. **Firmware Log Topic:** `/realsense/<SN>/firmware_log` is disabled at boot and publishes only when `Device.Log_Enable=true` and a subscriber is present. Keep `Device.Log_Level` conservative for normal use, and disable it again after collecting logs. The topic may remain visible in discovery after first enable, but samples stop when disabled.
+9. **Parameter Name Compatibility:** `Depth.option_Gain` and other underscore-separated legacy aliases are not supported on r58.3. Test scripts should discover parameters with `ros2 param list` and skip options that are absent.
 
 <hr>
 
