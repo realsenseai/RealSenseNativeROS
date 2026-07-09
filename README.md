@@ -295,12 +295,15 @@ ROS-facing names and tested behavior. Availability is firmware-dependent; use
 | `Depth.filter.Temporal.Persistency` | Integer | Temporal persistency mode |
 | `Depth.filter.Decimation.Toggle` | Integer | Enable/disable decimation filtering |
 | `Depth.filter.Decimation.Magnitude` | Integer | Decimation magnitude |
-| `Depth.filter.Improved_Close_Range_Depth.Enable` | Integer | Enable/disable improved close range depth |
+| `Depth.filter.Improved_Close_Range_Depth.Enable` | Integer | Enable/disable improved close range depth, the ROS-facing MinZ mode |
 
 Filter restrictions on r58.3:
 - Apply graph-selection filters, such as decimation, before starting Depth,
   AlignedDepth, PointCloud, or ObjectDetection subscribers.
 - Decimation + temporal is the validated depth-filter combination.
+- MinZ is not exposed as a literal `MinZ` ROS parameter on r58.3. Use
+  `Depth.filter.Improved_Close_Range_Depth.Enable`; the low-level MinZ tuning
+  values are firmware-controlled and are not ROS-settable.
 - ObjectDetection and depth filters are not concurrent workflows; stop OD before
   enabling depth filters, and stop depth-filter streaming before enabling OD
   distance.
@@ -366,9 +369,24 @@ ros2 param get /D555_343122300393 Depth.option.Exposure
 Keep parameter/service commands rate-limited to about 1-2 calls per second.
 
 ```bash
-# Enable temporal filtering and verify the setting
+# Enable temporal filtering and verify the setting before starting Depth.
 ros2 param set /D555_343122300393 Depth.filter.Temporal.Toggle 1
 ros2 param get /D555_343122300393 Depth.filter.Temporal.Toggle
+
+# Enable the validated temporal + decimation depth-filter combination.
+# Configure graph-selection filters before starting Depth/AlignedDepth/PointCloud subscribers.
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Toggle 1
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Magnitude 2
+python3 apps/show_ros_image.py \
+  --serial 343122300393 --stream Depth --duration 10
+
+# MinZ mode is exposed as Improved_Close_Range_Depth.Enable.
+# Use it as a separate pre-stream mode; do not combine it with decimation on r58.3.
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Toggle 0
+ros2 param set /D555_343122300393 Depth.filter.Improved_Close_Range_Depth.Enable 1
+python3 apps/show_ros_image.py \
+  --serial 343122300393 --stream Depth --duration 10
+ros2 param set /D555_343122300393 Depth.filter.Improved_Close_Range_Depth.Enable 0
 
 # Enable on-device aligned depth
 ros2 param set /D555_343122300393 Depth.option.Align_Depth 1
@@ -388,6 +406,12 @@ ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
 ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
 ros2 topic echo /realsense/D555_343122300393_ObjectDetection \
   --once --qos-reliability best_effort
+
+# Diagnostics JSON topic. show_ros_image.py can subscribe to it by alias.
+python3 apps/show_ros_image.py \
+  --serial 343122300393 --stream Diagnostics --duration 5
+ros2 topic echo /realsense/D555_343122300393/diagnostics \
+  --once --qos-reliability best_effort
 ```
 
 On the tested D555 r58.3 firmware, aligned depth produced
@@ -403,6 +427,11 @@ ObjectDetection output is scene/model dependent. `ObjectDetection.option.Object_
 is accepted when the depth-cache pipeline is available, but returns
 `Invalid value` if normal depth streaming is already active. Stop Depth and
 AlignedDepth subscribers before enabling Object Distance.
+
+Diagnostics are published as `std_msgs/msg/String` JSON on
+`/realsense/D555_<Serial>/diagnostics` when there is a subscriber. The
+`apps/show_ros_image.py --stream Diagnostics` path is a smoke test for that
+topic and uses the lower string-topic FPS threshold.
 
 <hr>
 
@@ -467,6 +496,7 @@ The published topics differ based on the device configuration and active streams
 | `/realsense/<SN>_Infrared_2` | `sensor_msgs/msg/Image` | Best Effort | Right IR image |
 | `/realsense/<SN>_Motion` | `sensor_msgs/msg/Imu` | Best Effort | IMU (gyro + accel) data |
 | `/realsense/<SN>_ObjectDetection` | `std_msgs/msg/String` | Best Effort | Object detection JSON output |
+| `/realsense/<SN>/diagnostics` | `std_msgs/msg/String` | Best Effort | Device diagnostics JSON, published when subscribed |
 | `/realsense/<SN>_<Stream>/camera_info` | `sensor_msgs/msg/CameraInfo` | Best Effort | Camera intrinsics & calibration |
 | `/realsense/<SN>_<Stream>/metadata` | `std_msgs/msg/String` | Best Effort | Per-frame metadata (JSON) |
 | `/realsense/<SN>/tf_static` | `tf2_msgs/msg/TFMessage` | Reliable, Transient Local | Static coordinate transforms |
@@ -497,6 +527,7 @@ Additional r58.3 topics appear only after enabling their parameters:
 | `/camera/camera/aligned_depth_to_color/image_raw` | `/realsense/D555_<Serial>_Aligned_Depth_To_Color` | `sensor_msgs/msg/Image` |
 | `/camera/camera/depth/color/points` | `/realsense/D555_<Serial>_Depth_Color_Points` | `sensor_msgs/msg/PointCloud2` |
 | `/camera/camera/imu` | `/realsense/D555_<Serial>_Motion` | `sensor_msgs/msg/Imu` |
+| Diagnostics | `/realsense/D555_<Serial>/diagnostics` | `std_msgs/msg/String` |
 | `/tf_static` | `/realsense/D555_<Serial>/tf_static` | `tf2_msgs/msg/TFMessage` |
 
 **Subscribe to a stream:**
@@ -805,7 +836,7 @@ multiple large streams still report dropped samples.
 3. **String Length Limits:** Parameter names and string values use fixed-size firmware buffers. `Device.Info` returns compact JSON from `ros2 param get`; use `ros2 param describe` or `get_device_info` for the full device description.
 4. **Native PointCloud2 Usage:** r58.3 exposes `/realsense/<SN>_Depth_Color_Points` after `Depth.option.Enable_PointCloud=1` (XYZ) or `2` (XYZRGB). Use one long-lived PointCloud subscriber and keep Depth + Color readers active for the most stable XYZRGB path. `apps/show_ros_image.py --stream PointCloud` adds those hidden guard subscribers automatically.
 5. **ObjectDetection Output:** `/realsense/<SN>_ObjectDetection` may publish JSON with `number_of_detections: 0` in an empty scene. `ObjectDetection.option.Object_Distance=1` can return `Invalid value` if Depth or AlignedDepth streaming is already active; stop those subscribers before enabling the depth-cache distance path.
-6. **Depth Filter Combinations:** Apply graph-selection filters before starting streams. Decimation + temporal is the validated depth-filter combination; do not combine improved close range depth with decimation on r58.3. OD distance and depth-filter streaming are separate workflows.
+6. **Depth Filter Combinations:** Apply graph-selection filters before starting streams. Decimation + temporal is the validated depth-filter combination. MinZ is exposed as `Depth.filter.Improved_Close_Range_Depth.Enable`; do not combine it with decimation on r58.3. OD distance and depth-filter streaming are separate workflows.
 7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. This is most visible when one camera publishes multiple large topics. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.
 8. **Parameter Name Compatibility:** `Depth.option_Gain` and other underscore-separated legacy aliases are not supported on r58.3. Test scripts should discover parameters with `ros2 param list` and skip options that are absent.
 

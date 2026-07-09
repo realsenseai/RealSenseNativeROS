@@ -16,7 +16,7 @@ Designed for both interactive viewing and automated CI/regression testing.
 
 ### Features
 
-- **Multi-stream tiling:** View Depth, Color, IR1, IR2, Color/compressed, aligned depth, and PointCloud2 smoke-test streams.
+- **Multi-stream tiling:** View Depth, Color, IR1, IR2, Color/compressed, aligned depth, Diagnostics JSON, and PointCloud2 smoke-test streams.
 - **Multi-camera:** Comma-separated serials for single-process multi-camera viewing.
 - **HW FPS measurement:** Sliding-window (2 s) real-time frame rate, independent of display rendering.
 - **Headless CI mode (default):** Prints status to stdout, writes a log file, auto-cleans on PASS.
@@ -49,6 +49,25 @@ ros2 param set /D555_343122300393 Depth.option.Align_Depth 0
 ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 2
 python3 show_ros_image.py --serial 343122300393 --stream PointCloud --duration 10
 ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
+
+# r58.3 temporal + decimation depth-filter smoke test.
+# Configure filters before starting Depth/AlignedDepth/PointCloud subscribers.
+ros2 param set /D555_343122300393 Depth.filter.Temporal.Toggle 1
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Toggle 1
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Magnitude 2
+python3 show_ros_image.py --serial 343122300393 --stream Depth --duration 10
+
+# MinZ mode is exposed as Improved_Close_Range_Depth.Enable.
+# Use it as a separate pre-stream mode, not together with decimation on r58.3.
+ros2 param set /D555_343122300393 Depth.filter.Decimation.Toggle 0
+ros2 param set /D555_343122300393 Depth.filter.Improved_Close_Range_Depth.Enable 1
+python3 show_ros_image.py --serial 343122300393 --stream Depth --duration 10
+ros2 param set /D555_343122300393 Depth.filter.Improved_Close_Range_Depth.Enable 0
+
+# Device diagnostics JSON topic
+python3 show_ros_image.py --serial 343122300393 --stream Diagnostics --duration 5
+ros2 topic echo /realsense/D555_343122300393/diagnostics \
+  --once --qos-reliability best_effort
 
 # ObjectDetection overlay on color; detections and distance fields in meters are scene/model dependent
 ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
@@ -84,6 +103,7 @@ export ROS_DOMAIN_ID=2
 | `CompColor` | `/realsense/<SN>_Color/compressed` |
 | `AlignedDepth` | `Aligned_Depth_To_Color` |
 | `Points`, `PointCloud` | `Depth_Color_Points` |
+| `Diagnostics`, `Diag` | `/realsense/<SN>/diagnostics` |
 
 ### Command-Line Options
 
@@ -103,6 +123,7 @@ export ROS_DOMAIN_ID=2
 
 - **PASS:** Image streams require HW FPS >= 29.5 and at least one frame received.
 - **PointCloud2 PASS:** PointCloud2 smoke tests require at least one sample and HW FPS >= 0.1. The app keeps hidden Depth + Color guard subscribers active for PointCloud streams.
+- **Diagnostics PASS:** Diagnostics/String topic smoke tests require at least one sample and HW FPS >= 0.1.
 - **FAIL:** Otherwise. Log and pcap (if `--debug`) are preserved for analysis.
 - On PASS, log/pcap artifacts are auto-deleted.
 - If `ros2 topic hz <topic>` reports less than 29.5 FPS, the app will fail by design even when callbacks are received.
@@ -118,6 +139,13 @@ the same time. `ObjectDetection.option.Object_Distance=1` may return
 enabling the depth-cache distance path. The overlay still subscribes to
 `/realsense/<SN>_ObjectDetection` and draws detections when messages contain
 detection boxes.
+
+For r58.3 depth filters, `Depth.filter.Temporal.*` and
+`Depth.filter.Decimation.*` are the tested temporal + decimation path. MinZ is
+not exposed as a literal `MinZ` parameter; use
+`Depth.filter.Improved_Close_Range_Depth.Enable` and keep it separate from
+decimation. Diagnostics are published as `std_msgs/msg/String` JSON on
+`/realsense/<SN>/diagnostics` when subscribed.
 
 ### GUI Layout
 

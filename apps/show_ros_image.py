@@ -39,11 +39,28 @@ Usage examples:
   python3 show_ros_image.py --serial 344522301530 --stream Depth_Color_Points --duration 10
   ros2 param set /D555_344522301530 Depth.option.Enable_PointCloud 0
 
+  # Native r58.3 depth filters; set graph-selection filters before streaming.
+  ros2 param set /D555_344522301530 Depth.filter.Temporal.Toggle 1
+  ros2 param set /D555_344522301530 Depth.filter.Decimation.Toggle 1
+  ros2 param set /D555_344522301530 Depth.filter.Decimation.Magnitude 2
+  python3 show_ros_image.py --serial 344522301530 --stream Depth --duration 10
+
+  # MinZ is exposed as Improved_Close_Range_Depth.Enable in native ROS.
+  # Use it as a separate pre-stream mode, not together with decimation.
+  ros2 param set /D555_344522301530 Depth.filter.Decimation.Toggle 0
+  ros2 param set /D555_344522301530 Depth.filter.Improved_Close_Range_Depth.Enable 1
+  python3 show_ros_image.py --serial 344522301530 --stream Depth --duration 10
+  ros2 param set /D555_344522301530 Depth.filter.Improved_Close_Range_Depth.Enable 0
+
+  # Device diagnostics JSON topic
+  python3 show_ros_image.py --serial 344522301530 --stream Diagnostics --duration 5
+
 Stream aliases:
   IR1 / IR2 / IR3  →  Infrared_1/2/3
   CompColor        →  Color/compressed
   Points/PointCloud → Depth_Color_Points
   AlignedDepth     →  Aligned_Depth_To_Color
+  Diagnostics/Diag →  /realsense/D555_<SN>/diagnostics
 
 Output files (headless / debug):
   Log:   ros2-<SN>-<stream>-image-<YYYYMMDD_HHMMSS>.log
@@ -105,6 +122,8 @@ def normalize_to_u8(x: np.ndarray) -> np.ndarray:
 
 
 def build_topic(serial: str, stream: str) -> str:
+    if stream == "Diagnostics":
+        return f"/realsense/D555_{serial}/diagnostics"
     if stream == "CompressedColor":
         return f"/realsense/D555_{serial}_Color/compressed"
     return f"/realsense/D555_{serial}_{stream}"
@@ -121,6 +140,12 @@ def is_pointcloud_stream(stream: str, topic: str) -> bool:
     t = (topic or "").lower()
     return any(token in s or token in t for token in (
         "pointcloud", "points", "depth_color_points"))
+
+
+def is_string_stream(stream: str, topic: str) -> bool:
+    s = (stream or "").lower()
+    t = (topic or "").lower()
+    return s in ("diagnostics", "diag") or t.endswith("/diagnostics")
 
 
 def detect_serial() -> str:
@@ -391,6 +416,8 @@ _STREAM_ALIASES: dict[str, str] = {
     "aligned_depth": "Aligned_Depth_To_Color",
     "aligneddepthtocolor": "Aligned_Depth_To_Color",
     "aligned_depth_to_color": "Aligned_Depth_To_Color",
+    "diag":         "Diagnostics",
+    "diagnostics":  "Diagnostics",
     "color":        "Color",
     "depth":        "Depth",
     "motion":       "Motion",
@@ -527,6 +554,7 @@ class StreamState:
 
 class Viewer(Node):
     def __init__(self, topic: str, compressed: bool, pointcloud: bool,
+                 string_stream: bool,
                  node_name: str, state: StreamState, render_frames: bool = True,
                  od_topic: str = None):
         super().__init__(node_name)
@@ -540,7 +568,11 @@ class Viewer(Node):
         self._sub = None
         self._od_sub = None
 
-        if pointcloud:
+        if string_stream:
+            self._sub = self.create_subscription(
+                String, topic, self._cb_string, qos)
+            self.get_logger().info(f"[{topic}] String BEST_EFFORT")
+        elif pointcloud:
             self._sub = self.create_subscription(
                 PointCloud2, topic, self._cb_pointcloud, qos)
             self.get_logger().info(f"[{topic}] PointCloud2 BEST_EFFORT")
@@ -649,6 +681,76 @@ class Viewer(Node):
         with st.lock:
             st.od_detections = data.get("detections", [])
             st.od_count += 1
+
+    @staticmethod
+    def _render_string_summary(msg: String) -> np.ndarray:
+        """Render a compact status tile for JSON string topics such as diagnostics."""
+        import json
+        w, h = 800, 480
+        tile = np.full((h, w, 3), (28, 34, 42), dtype=np.uint8)
+        payload = msg.data or ""
+        title = "String"
+        lines = [f"bytes: {len(payload)}"]
+        try:
+            data = json.loads(payload)
+            if isinstance(data, dict):
+                status = data.get("status")
+                if isinstance(status, list):
+                    title = "Diagnostics"
+                    lines.append(f"status entries: {len(status)}")
+                    stamp = data.get("header", {}).get("stamp", {})
+                    if stamp:
+                        nsec = int(stamp.get("nanosec", 0) or 0)
+                        lines.append(
+                            f"stamp: {stamp.get('sec', '?')}.{nsec:09d}")
+                    for entry in status[:4]:
+                        name = entry.get("name", "(unnamed)")
+                        hardware_id = entry.get("hardware_id", "")
+                        lines.append(f"- {name} {hardware_id}".strip())
+                        values = entry.get("values", [])
+                        if isinstance(values, list):
+                            for value in values[:3]:
+                                key = value.get("key", "")
+                                val = value.get("value", "")
+                                lines.append(f"  {key}: {val}")
+                            if len(values) > 3:
+                                lines.append(f"  ... {len(values) - 3} more values")
+                    if len(status) > 4:
+                        lines.append(f"... {len(status) - 4} more status entries")
+                else:
+                    title = "JSON String"
+                    lines.extend(f"{k}: {v}" for k, v in list(data.items())[:8])
+            else:
+                lines.append(str(data))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            lines.extend(payload.splitlines()[:10])
+
+        y = 56
+        cv2.putText(tile, title, (28, y), _FONT, 1.0,
+                    (0, 220, 255), 2, cv2.LINE_AA)
+        y += 54
+        for line in lines[:12]:
+            text = str(line)
+            if len(text) > 100:
+                text = text[:97] + "..."
+            cv2.putText(tile, text, (28, y), _FONT, 0.50,
+                        (230, 235, 240), 1, cv2.LINE_AA)
+            y += 32
+        return tile
+
+    def _cb_string(self, msg: String):
+        st = self.state
+        if st.closed:
+            return
+        with st.lock:
+            st.record_hw_frame()
+            st.fmt = "String"
+            st.meta = f"bytes={len(msg.data or '')}"
+        if not self.render_frames:
+            return
+        tile = self._render_string_summary(msg)
+        with st.lock:
+            st.latest = tile
 
     @staticmethod
     def _render_pointcloud_summary(msg: PointCloud2) -> np.ndarray:
@@ -984,7 +1086,9 @@ def main():
         help=("Stream name(s), '+' or ',' separated.  Aliases: "
               "IR1=Infrared_1, IR2=Infrared_2, IR3=Infrared_3, "
               "CompColor=Color/compressed, Points=Depth_Color_Points, "
-              "AlignedDepth=Aligned_Depth_To_Color.  e.g. Depth+IR1+IR2"),
+              "AlignedDepth=Aligned_Depth_To_Color, "
+              "Diagnostics=/realsense/D555_<SN>/diagnostics.  "
+              "e.g. Depth+IR1+IR2"),
     )
     ap.add_argument(
         "--topic", help="Single full topic path (overrides --serial/--stream)")
@@ -1178,8 +1282,9 @@ def main():
     for topic, label in streams_info:
         compressed = is_compressed_stream(label, topic)
         pointcloud = is_pointcloud_stream(label, topic)
+        string_stream = is_string_stream(label, topic)
         node_name = sanitize(f"d555_viewer_{label}_{uuid.uuid4().hex[:6]}")
-        min_fps = 0.1 if pointcloud else _HW_FPS_OK_THRESHOLD
+        min_fps = 0.1 if (pointcloud or string_stream) else _HW_FPS_OK_THRESHOLD
         st = StreamState(min_fps=min_fps)
         # Determine OD topic for this stream (--od flag, Color or Color/compressed only)
         od_topic = None
@@ -1191,13 +1296,14 @@ def main():
                 _sn_match = re.search(r"D555_(\d+)", topic)
                 _sn = _sn_match.group(1) if _sn_match else serial
                 od_topic = f"/realsense/D555_{_sn}_ObjectDetection"
-        node = Viewer(topic, compressed, pointcloud, node_name, st,
+        node = Viewer(topic, compressed, pointcloud, string_stream, node_name, st,
                       render_frames=gui_mode, od_topic=od_topic)
         states.append(st)
         nodes.append(node)
         labels.append(label)
         print(f"  → Stream:{label}  topic={topic}  compressed={compressed}"
-              f"  pointcloud={pointcloud}  min_fps={min_fps:.1f}"
+              f"  pointcloud={pointcloud}  string={string_stream}"
+              f"  min_fps={min_fps:.1f}"
               f"{'  od=' + od_topic if od_topic else ''}")
 
     # ── one executor + spin thread per stream ─────────────────────────────────
