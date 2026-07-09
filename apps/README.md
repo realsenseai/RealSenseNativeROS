@@ -50,7 +50,7 @@ ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 2
 python3 show_ros_image.py --serial 343122300393 --stream PointCloud --duration 10
 ros2 param set /D555_343122300393 Depth.option.Enable_PointCloud 0
 
-# ObjectDetection overlay on color; detections and distance fields are scene/model dependent
+# ObjectDetection overlay on color; detections and distance fields in meters are scene/model dependent
 ros2 param set /D555_343122300393 ObjectDetection.option.Object_Distance 1
 python3 show_ros_image.py --gui --serial 343122300393 --stream Color --od
 

@@ -282,6 +282,11 @@ Most parameters follow the format: `<Sensor>.<Group>.<Name>`. Depth filters use
 
 #### Depth Filter Parameters
 
+The following names describe the r58.3 native ROS parameter surface. Some
+underlying filters existed before r58.3, but this README documents the r58.3
+ROS-facing names and tested behavior. Availability is firmware-dependent; use
+`ros2 param list /D555_<Serial>` as the source of truth.
+
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
 | `Depth.filter.Temporal.Toggle` | Integer | Enable/disable temporal filtering |
@@ -292,12 +297,24 @@ Most parameters follow the format: `<Sensor>.<Group>.<Name>`. Depth filters use
 | `Depth.filter.Decimation.Magnitude` | Integer | Decimation magnitude |
 | `Depth.filter.Improved_Close_Range_Depth.Enable` | Integer | Enable/disable improved close range depth |
 
+Filter restrictions on r58.3:
+- Apply graph-selection filters, such as decimation, before starting Depth,
+  AlignedDepth, PointCloud, or ObjectDetection subscribers.
+- Decimation + temporal is the validated depth-filter combination.
+- ObjectDetection and depth filters are not concurrent workflows; stop OD before
+  enabling depth filters, and stop depth-filter streaming before enabling OD
+  distance.
+- Do not combine `Depth.filter.Improved_Close_Range_Depth.Enable` with
+  decimation on r58.3. Configure improved close range depth as a separate mode.
+- Unsupported or active-stream combinations may reject `ros2 param set` with
+  `Invalid value`; verify the applied state with `ros2 param get`.
+
 #### Object Detection Parameters
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
 | `ObjectDetection.Profile` | Integer | Read-only object detection FPS profile; tested value: `30` |
-| `ObjectDetection.option.Object_Distance` | Integer | Include per-detection distance when the setting is accepted and ObjectDetection publishes output |
+| `ObjectDetection.option.Object_Distance` | Integer | 0/1 toggle. When enabled and accepted, ObjectDetection JSON may include a per-detection `distance` field in meters |
 
 #### RGB Sensor Parameters
 
@@ -760,9 +777,10 @@ If the header timestamp increments by about 33.3 ms but `ros2 topic echo`
 prints `A message was lost!!!`, the camera cadence is 30 FPS and the loss is in
 the DDS/network receive path.
 
-On r58.3, setting `Device.Transmission_Delay` adds microsecond-level pacing to
-large DDS data fragments. This reduces Ethernet/DDS microbursts without changing
-the stream profile:
+On r58.3, `Device.Transmission_Delay` is exposed as a ROS parameter for the
+device DDS traffic-shaping setting. It adds microsecond-level pacing to large
+DDS data fragments. This reduces Ethernet/DDS microbursts without changing the
+stream profile:
 
 ```bash
 ros2 param set /D555_<Serial> Device.Transmission_Delay 36
@@ -772,8 +790,11 @@ ros2 topic hz /realsense/D555_<Serial>_Color/compressed
 
 On the tested D555 r58.3 firmware, `Device.Transmission_Delay=36` restored
 Depth and Color/compressed from about 15-23 FPS to about 30 FPS with MTU 9000.
-Use `48` for a more conservative stress-test setting if multiple large streams
-still report dropped samples.
+This can happen even with a single camera when the host subscribes to multiple
+large DDS samples at the same time, such as Depth plus Color/compressed,
+AlignedDepth, or PointCloud2. Low-bandwidth single-topic tests usually do not
+need this setting. Use `48` for a more conservative stress-test setting if
+multiple large streams still report dropped samples.
 
 ### Known Limitations
 
@@ -784,8 +805,8 @@ still report dropped samples.
 3. **String Length Limits:** Parameter names and string values use fixed-size firmware buffers. `Device.Info` returns compact JSON from `ros2 param get`; use `ros2 param describe` or `get_device_info` for the full device description.
 4. **Native PointCloud2 Usage:** r58.3 exposes `/realsense/<SN>_Depth_Color_Points` after `Depth.option.Enable_PointCloud=1` (XYZ) or `2` (XYZRGB). Use one long-lived PointCloud subscriber and keep Depth + Color readers active for the most stable XYZRGB path. `apps/show_ros_image.py --stream PointCloud` adds those hidden guard subscribers automatically.
 5. **ObjectDetection Output:** `/realsense/<SN>_ObjectDetection` may publish JSON with `number_of_detections: 0` in an empty scene. `ObjectDetection.option.Object_Distance=1` can return `Invalid value` if Depth or AlignedDepth streaming is already active; stop those subscribers before enabling the depth-cache distance path.
-6. **Pre-stream Filter Changes:** Apply decimation and improved close range depth settings before starting high-bandwidth stream tests when possible.
-7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.
+6. **Depth Filter Combinations:** Apply graph-selection filters before starting streams. Decimation + temporal is the validated depth-filter combination; do not combine improved close range depth with decimation on r58.3. OD distance and depth-filter streaming are separate workflows.
+7. **High-bandwidth DDS Loss:** With MTU 9000 and `Device.Transmission_Delay=0`, some hosts may receive Depth at about 15-17 FPS and Color/compressed at about 21-23 FPS even though the profile is 30 FPS. This is most visible when one camera publishes multiple large topics. Set `Device.Transmission_Delay` to `36` us before high-bandwidth tests.
 8. **Parameter Name Compatibility:** `Depth.option_Gain` and other underscore-separated legacy aliases are not supported on r58.3. Test scripts should discover parameters with `ros2 param list` and skip options that are absent.
 
 <hr>
