@@ -187,11 +187,11 @@ flowchart TD
 
 ## Prerequisites
 
-- **ROS 2 Humble**, or **ROS 2 Jazzy with Cyclone DDS**
+- **ROS 2 Humble with eProsima Fast DDS** (`rmw_fastrtps_cpp`), or
+  **ROS 2 Jazzy with Cyclone DDS** (`rmw_cyclonedds_cpp`)
 - Python 3 with `rclpy`, `sensor_msgs`, `std_msgs`
 - One or more D555 cameras visible on the ROS 2 domain
 - `ROS_DOMAIN_ID` set correctly (e.g., `export ROS_DOMAIN_ID=2`)
-- On Jazzy, `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
 
 ## Usage
 

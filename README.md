@@ -66,7 +66,7 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 | **TF / Extrinsics** | ✅ Published (`/tf`, `/tf_static`) | ✅ Published (`/tf_static`) |
 | **Metadata** | ✅ `realsense2_camera_msgs/msg/Metadata` | ✅ `std_msgs/msg/String` (JSON); pre-7.58 firmware also exposed legacy metadata |
 | **Point Cloud** | ✅ Host-generated | ✅ Native PointCloud2 publisher, gated by `Depth.option.Enable_PointCloud` |
-| **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble; Jazzy requires Cyclone DDS |
+| **ROS Version** | Humble, Jazzy, Kilted, Rolling | Humble with Fast DDS; Jazzy with Cyclone DDS |
 
 <hr>
 
@@ -75,8 +75,7 @@ The RealSense D555 camera includes a **native ROS2 interface** implemented direc
 ### Prerequisites
 - **Network:** The D555 device must be on the same network subnet as the host PC (e.g., `192.168.11.x/24`, subnet mask `255.255.255.0`).
 - **Multicast:** The network must support UDP multicast for DDS discovery.
-- **ROS2 Distribution:** Humble or Jazzy.
-- **DDS Middleware:** Jazzy must use Cyclone DDS (`rmw_cyclonedds_cpp`).
+- **ROS2 and DDS:** Humble with eProsima Fast DDS (`rmw_fastrtps_cpp`), or Jazzy with Cyclone DDS (`rmw_cyclonedds_cpp`).
 - **MTU:** 9000 (this is the factory default and can be changed via device configuration). Jumbo frames are required on both host and device.
 
 ### Step 1: Install a ROS2 Distribution
@@ -99,6 +98,7 @@ For Humble hosts:
 
 ```bash
 source /opt/ros/humble/setup.bash
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ```
 
 ### Step 1.5: Update Device Firmware
